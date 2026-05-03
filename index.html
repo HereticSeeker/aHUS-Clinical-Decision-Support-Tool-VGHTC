@@ -456,8 +456,8 @@
                             </tbody>
                             <tbody id="sec-treatment" class="section-content hidden">
                                 <tr class="label-row"><td>治療項目</td><td>評估日期</td><td>紀錄</td><td>條件核對結果</td></tr>
-                                <tr><td class="item-header">Plasma Transfusion (施行次數/週)</td><td data-label="評估日期"><input type="date" class="auto-date" onchange="updateCharts()"></td><td data-label="評估紀錄"><input type="number" inputmode="decimal" oninput="logicCheck(this, 'treatment'); generateTreatmentDates(this, 'pt')" id="in_pt_count" placeholder="輸入數值"></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
-                                <tr><td class="item-header">Plasma Exchange (施行次數/週)</td><td data-label="評估日期"><input type="date" class="auto-date" onchange="updateCharts()"></td><td data-label="評估紀錄"><input type="number" inputmode="decimal" oninput="logicCheck(this, 'treatment'); generateTreatmentDates(this, 'pe')" id="in_pe_count" placeholder="輸入數值"></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
+                                <tr><td class="item-header">Plasma Transfusion (施行次數/週)</td><td data-label="評估日期"><input type="text" class="text-center text-slate-400 bg-slate-100/70 border-slate-200 cursor-not-allowed font-bold text-[13px]" value="詳見下方明細" disabled></td><td data-label="評估紀錄"><input type="number" inputmode="decimal" oninput="logicCheck(this, 'treatment'); generateTreatmentDates(this, 'pt')" id="in_pt_count" placeholder="輸入數值"></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
+                                <tr><td class="item-header">Plasma Exchange (施行次數/週)</td><td data-label="評估日期"><input type="text" class="text-center text-slate-400 bg-slate-100/70 border-slate-200 cursor-not-allowed font-bold text-[13px]" value="詳見下方明細" disabled></td><td data-label="評估紀錄"><input type="number" inputmode="decimal" oninput="logicCheck(this, 'treatment'); generateTreatmentDates(this, 'pe')" id="in_pe_count" placeholder="輸入數值"></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
                                 <tr><td class="item-header">HD (施行次數/週)</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select id="in_hd_count" onchange="calculateNHICompliance()"><option value="">請選擇</option><script>for(let i=1;i<=7;i++)document.write(`<option value="${i}">${i}次</option>`)</script></select></td><td data-label="核對結果" class="bg-slate-50 text-slate-400 italic text-center text-xs result-cell flex items-center justify-center">不顯示判定</td></tr>
                             </tbody>
                         </table>
@@ -1179,50 +1179,78 @@
             const parser = new DOMParser();
             const importedDoc = parser.parseFromString(htmlText, 'text/html');
 
+            const normalizeText = (t) => t ? t.replace(/[\s\u00A0\u200B-\u200D\uFEFF\r\n\t↳\(\)（）]/g, '').toLowerCase() : '';
+
+            // 共用的日期格式正規化函式
+            const normalizeDate = (dVal) => {
+                if (!dVal) return '';
+                let cleaned = dVal.replace(/年|月/g, '-').replace(/日/g, '').replace(/\//g, '-').replace(/[\s\u00A0\u200B-\u200D\uFEFF\r\n\t]/g, '');
+                
+                if (/^\d+$/.test(cleaned)) {
+                    const serial = parseInt(cleaned, 10);
+                    if (serial > 20000 && serial < 80000) { 
+                        const date = new Date((serial - 25569) * 86400 * 1000);
+                        const y = date.getFullYear();
+                        const m = String(date.getMonth() + 1).padStart(2, '0');
+                        const d = String(date.getDate()).padStart(2, '0');
+                        return `${y}-${m}-${d}`;
+                    }
+                }
+
+                const parts = cleaned.split('-');
+                if (parts.length >= 3) {
+                    let y = parts[0], m = parts[1], d = parts[2];
+                    if (d.length === 4) { y = parts[2]; m = parts[0]; d = parts[1]; }
+                    const formatted = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+                    return isNaN(Date.parse(formatted)) ? cleaned : formatted;
+                }
+                return cleaned;
+            };
+
             // 1. 預先處理 PT / PE 次數，觸發動態欄位生成，確保架構與匯入檔一致
-            const headers = Array.from(importedDoc.querySelectorAll('td.item-header'));
+            const headers = Array.from(importedDoc.querySelectorAll('td.item-header, td:first-child'));
             
-            const ptHeader = headers.find(td => td.innerText.includes('Plasma Transfusion'));
+            const ptHeader = headers.find(td => normalizeText(td.textContent).includes('plasmatransfusion'));
             if (ptHeader) {
-                const span = ptHeader.parentElement.querySelector('td[data-label="評估紀錄"] span:not(.text-slate-300)');
-                if (span) {
-                    const val = span.innerText.trim();
+                const tr = ptHeader.parentElement;
+                const cell = tr.cells[2] || tr.cells[1] || tr.cells[tr.cells.length - 1];
+                if (cell) {
+                    const val = cell.textContent.replace(/[^\d]/g, '').trim();
                     const input = document.getElementById('in_pt_count');
                     if (val && !isNaN(val)) { 
                         input.value = val; 
-                        input.dispatchEvent(new Event('input', {bubbles:true}));
-                        generateTreatmentDates(input, 'pt'); 
+                        input.dispatchEvent(new Event('input', {bubbles:true})); 
                     }
                 }
             }
 
-            const peHeader = headers.find(td => td.innerText.includes('Plasma Exchange'));
+            const peHeader = headers.find(td => normalizeText(td.textContent).includes('plasmaexchange'));
             if (peHeader) {
-                const span = peHeader.parentElement.querySelector('td[data-label="評估紀錄"] span:not(.text-slate-300)');
-                if (span) {
-                    const val = span.innerText.trim();
+                const tr = peHeader.parentElement;
+                const cell = tr.cells[2] || tr.cells[1] || tr.cells[tr.cells.length - 1];
+                if (cell) {
+                    const val = cell.textContent.replace(/[^\d]/g, '').trim();
                     const input = document.getElementById('in_pe_count');
                     if (val && !isNaN(val)) { 
                         input.value = val; 
-                        input.dispatchEvent(new Event('input', {bubbles:true}));
-                        generateTreatmentDates(input, 'pe'); 
+                        input.dispatchEvent(new Event('input', {bubbles:true})); 
                     }
                 }
             }
 
-            // 2. 還原基本患者資訊 (透過 Label 標題精準配對抓取對應的數值)
+            // 2. 還原基本患者資訊
             const impLabels = Array.from(importedDoc.querySelectorAll('label'));
             const getBasicVal = (labelText) => {
-                const lbl = impLabels.find(l => l.innerText.includes(labelText));
+                const lbl = impLabels.find(l => l.textContent.includes(labelText));
                 if (lbl && lbl.parentElement) {
                     const span = lbl.parentElement.querySelector('span');
-                    if (span) return span.innerText.trim();
+                    if (span) return span.textContent.trim();
                 }
                 return '';
             };
 
             const formDateVal = getBasicVal('填表日期');
-            if (formDateVal) document.getElementById('form_date').value = formDateVal;
+            if (formDateVal) document.getElementById('form_date').value = normalizeDate(formDateVal);
 
             const formDocVal = getBasicVal('填表醫師');
             if (formDocVal) document.getElementById('form_doc').value = formDocVal;
@@ -1241,66 +1269,163 @@
             }
 
             // 3. 還原表格輸入欄位與選擇核取
-            const liveRows = document.querySelectorAll('#checklistForm tbody tr');
             const importedRows = Array.from(importedDoc.querySelectorAll('tbody tr'));
-            
-            let ptIndex = 0;
-            let peIndex = 0;
+            const ptImportedDates = [];
+            const peImportedDates = [];
+            let currentSection = '';
+
+            importedRows.forEach(tr => {
+                const textContent = normalizeText(tr.textContent); 
+                
+                // 判斷目前所在的區塊 (狀態機修正：因為 normalizeText 會吃掉括號，改比對純中文字)
+                if (textContent.includes('plasmatransfusion')) currentSection = 'pt';
+                else if (textContent.includes('plasmaexchange')) currentSection = 'pe';
+                else if (textContent.includes('hd施行次數')) currentSection = ''; // 離開 PE/PT 區塊
+                
+                // 尋找「第N次治療」的特徵，並對號入座放入陣列
+                const match = textContent.match(/第(\d+)次治療/);
+                if (match && (currentSection === 'pt' || currentSection === 'pe')) {
+                    const idx = parseInt(match[1], 10) - 1; // 轉為 0-based index
+                    
+                    let foundDateVal = '';
+                    
+                    for (let cell of tr.cells) {
+                        let txt = cell.textContent.trim();
+                        let norm = normalizeDate(txt);
+                        if (/^\d{4}-\d{2}-\d{2}$/.test(norm)) {
+                            foundDateVal = norm;
+                            break;
+                        }
+                    }
+                    
+                    if (!foundDateVal) {
+                        const dateMatch = tr.textContent.match(/\d{1,4}[-/]\d{1,2}[-/]\d{1,4}/);
+                        if(dateMatch) {
+                            foundDateVal = normalizeDate(dateMatch[0]);
+                        }
+                    }
+                    
+                    if (currentSection === 'pt') ptImportedDates[idx] = foundDateVal;
+                    else if (currentSection === 'pe') peImportedDates[idx] = foundDateVal;
+                }
+            });
+
+            const liveRows = document.querySelectorAll('#checklistForm tbody tr');
+            let ptLiveCount = 0;
+            let peLiveCount = 0;
 
             liveRows.forEach(liveTr => {
+                // --- 針對 PT/PE 明細列，直接從陣列中依序取值 ---
+                if (liveTr.classList.contains('dynamic-row-pt')) {
+                    const dVal = ptImportedDates[ptLiveCount];
+                    if (dVal && /^\d{4}-\d{2}-\d{2}$/.test(dVal)) {
+                        const liveDate = liveTr.querySelector('input[type="date"]');
+                        if (liveDate) {
+                            liveDate.value = dVal;
+                            liveDate.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+                    }
+                    ptLiveCount++;
+                    return; 
+                } else if (liveTr.classList.contains('dynamic-row-pe')) {
+                    const dVal = peImportedDates[peLiveCount];
+                    if (dVal && /^\d{4}-\d{2}-\d{2}$/.test(dVal)) {
+                        const liveDate = liveTr.querySelector('input[type="date"]');
+                        if (liveDate) {
+                            liveDate.value = dVal;
+                            liveDate.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+                    }
+                    peLiveCount++;
+                    return; 
+                }
+
+                // --- 常規項目的配對與還原 ---
                 let impTr = null;
+
                 if (liveTr.id) {
                     impTr = importedDoc.getElementById(liveTr.id);
-                } else if (liveTr.classList.contains('dynamic-row-pt')) {
-                    const impPts = importedDoc.querySelectorAll('.dynamic-row-pt');
-                    if (impPts[ptIndex]) impTr = impPts[ptIndex++];
-                } else if (liveTr.classList.contains('dynamic-row-pe')) {
-                    const impPes = importedDoc.querySelectorAll('.dynamic-row-pe');
-                    if (impPes[peIndex]) impTr = impPes[peIndex++];
                 } else {
-                    const liveHeader = liveTr.querySelector('td.item-header');
+                    const liveHeader = liveTr.querySelector('td.item-header') || liveTr.querySelector('td:first-child');
                     if (liveHeader) {
-                        const hText = liveHeader.innerText.trim();
-                        impTr = importedRows.find(tr => {
-                            const h = tr.querySelector('td.item-header');
-                            return h && h.innerText.trim() === hText;
-                        });
+                        const hText = normalizeText(liveHeader.textContent);
+                        if (hText) {
+                            impTr = importedRows.find(tr => {
+                                return Array.from(tr.cells).slice(0, 2).some(c => normalizeText(c.textContent) === hText);
+                            });
+                        }
                     }
                 }
 
                 if (impTr) {
-                    // 填入日期
-                    const liveDate = liveTr.querySelector('td[data-label="評估日期"] input');
-                    const impDate = impTr.querySelector('td[data-label="評估日期"] span:not(.text-slate-300)');
-                    if (liveDate && impDate) {
-                        const dVal = impDate.innerText.trim();
-                        if(dVal) liveDate.value = dVal;
-                    }
-
-                    // 填入紀錄數值或選項
-                    const liveRecords = liveTr.querySelectorAll('td[data-label="評估紀錄"] input, td[data-label="評估紀錄"] select');
-                    const impRecords = impTr.querySelectorAll('td[data-label="評估紀錄"] span:not(.text-slate-300)');
-                    for (let i = 0; i < liveRecords.length; i++) {
-                        if (impRecords[i]) {
-                            const text = impRecords[i].innerText.trim();
-                            if (text) {
-                                if (liveRecords[i].tagName === 'SELECT') {
-                                    Array.from(liveRecords[i].options).forEach(opt => { if(opt.text === text) liveRecords[i].value = opt.value; });
-                                } else {
-                                    liveRecords[i].value = text;
-                                }
-                                liveRecords[i].dispatchEvent(new Event('input', { bubbles: true }));
-                                liveRecords[i].dispatchEvent(new Event('change', { bubbles: true }));
+                    // 填入常規項目日期
+                    const liveDate = liveTr.querySelector('input[type="date"]');
+                    if (liveDate) {
+                        let foundDateVal = '';
+                        for (let cell of impTr.cells) {
+                            let txt = cell.textContent.trim();
+                            let norm = normalizeDate(txt);
+                            if (/^\d{4}-\d{2}-\d{2}$/.test(norm)) {
+                                foundDateVal = norm;
+                                break; 
                             }
+                        }
+                        
+                        if (!foundDateVal) {
+                            const dateMatch = impTr.textContent.match(/\d{1,4}[-/]\d{1,2}[-/]\d{1,4}/);
+                            if(dateMatch) foundDateVal = normalizeDate(dateMatch[0]);
+                        }
+                        
+                        if (foundDateVal && /^\d{4}-\d{2}-\d{2}$/.test(foundDateVal)) {
+                            liveDate.value = foundDateVal;
+                            liveDate.dispatchEvent(new Event('change', { bubbles: true }));
                         }
                     }
 
+                    // 填入紀錄數值或選項
+                    const liveRecords = liveTr.querySelectorAll('td[data-label="評估紀錄"] input:not([type="hidden"]), td[data-label="評估紀錄"] select');
+                    Array.from(liveRecords).forEach(liveInput => {
+                        // 🚨 終極修復點：禁止母項目二次觸發更新！
+                        // 否則它會啟動自我毀滅機制，把剛剛填好日期的明細列全部刪除重算。
+                        if (liveInput.id === 'in_pt_count' || liveInput.id === 'in_pe_count') return;
+
+                        const liveCell = liveInput.closest('td');
+                        const cellIdx = Array.from(liveTr.cells).indexOf(liveCell);
+                        
+                        if (cellIdx !== -1 && impTr.cells[cellIdx]) {
+                            if (liveInput.classList.contains('track-bp-sys')) {
+                                const bpText = impTr.cells[cellIdx].textContent.trim();
+                                const parts = bpText.split('/');
+                                if (parts[0]) liveInput.value = parts[0].trim();
+                            } else if (liveInput.classList.contains('track-bp-dia')) {
+                                const bpText = impTr.cells[cellIdx].textContent.trim();
+                                const parts = bpText.split('/');
+                                if (parts[1]) liveInput.value = parts[1].trim();
+                            } else {
+                                const text = impTr.cells[cellIdx].textContent.trim();
+                                if (text) {
+                                    if (liveInput.tagName === 'SELECT') {
+                                        Array.from(liveInput.options).forEach(opt => { if(opt.text === text) liveInput.value = opt.value; });
+                                    } else {
+                                        liveInput.value = text;
+                                    }
+                                }
+                            }
+                            liveInput.dispatchEvent(new Event('input', { bubbles: true }));
+                            liveInput.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+                    });
+
                     // 填入 PLASMIC Score 單選框
                     ['YES', 'NO'].forEach(label => {
-                        const liveRadio = liveTr.querySelector(`td[data-label="${label}"] input[type="radio"]`);
-                        const impSpan = impTr.querySelector(`td[data-label="${label}"] span`);
-                        if (liveRadio && impSpan && impSpan.innerText.trim() === '☑') {
-                            liveRadio.checked = true;
+                        const liveCell = liveTr.querySelector(`td[data-label="${label}"]`);
+                        if (liveCell) {
+                            const cellIdx = Array.from(liveTr.cells).indexOf(liveCell);
+                            const liveRadio = liveCell.querySelector(`input[type="radio"]`);
+                            if (liveRadio && impTr.cells[cellIdx]) {
+                                const text = impTr.cells[cellIdx].textContent.trim();
+                                if (text === '☑') liveRadio.checked = true;
+                            }
                         }
                     });
                 }
@@ -1428,74 +1553,111 @@
         
         setFabLoading(true, 'btnImage');
 
-        html2canvas(element, {
-            scale: 2, 
-            useCORS: true, 
-            logging: false, 
-            backgroundColor: '#f1f5f9',
-            width: targetWidth,
-            windowWidth: targetWidth, 
-            onclone: (clonedDoc) => {
-                const clonedSections = clonedDoc.querySelectorAll('.section-content');
-                clonedSections.forEach(sec => sec.classList.remove('hidden'));
-                
-                const toggleBadges = clonedDoc.querySelectorAll('.toggle-badge');
-                toggleBadges.forEach(badge => badge.style.display = 'none');
-
-                // 移除 UI 防呆用的進度標籤與黃色底色，讓畫面保持專業
-                clonedDoc.querySelectorAll('.prog-badge').forEach(badge => badge.remove());
-                clonedDoc.querySelectorAll('.unfilled-highlight').forEach(el => el.classList.remove('unfilled-highlight'));
-
-                const clonedElement = clonedDoc.getElementById('mainContent');
-                clonedElement.style.width = targetWidth + 'px';
-                clonedElement.style.maxWidth = 'none';
-                clonedElement.style.padding = '20px 40px'; 
-
-                // --- 解決文字截斷優化：將輸入框替換為靜態 div 以確保完美渲染 ---
-                const inputs = clonedDoc.querySelectorAll('input:not([type="radio"]):not([type="checkbox"]), select');
-                inputs.forEach(input => {
-                    const div = clonedDoc.createElement('div');
-                    let val = input.value;
-                    if (input.tagName === 'SELECT') {
-                        val = input.options[input.selectedIndex]?.text || '';
-                        if (val === '請選擇') val = '';
-                    }
-                    div.innerText = val || ' '; // 空值塞入空白以撐開高度
-                    // 賦予與輸入框相同的 CSS 樣式，並設定垂直置中
-                    div.style.cssText = `
-                        width: 100%; border: 1.5px solid #cbd5e1; border-radius: 6px;
-                        padding: 10px 8px; font-size: 14px; background-color: #fff;
-                        box-sizing: border-box; min-height: 44px; display: flex;
-                        align-items: center; color: #1e293b; word-break: break-word;
-                        line-height: 1.4;
-                    `;
-                    input.parentNode.replaceChild(div, input);
-                });
-                
-                // 額外增加表格儲存格的上下內距，防止其他文字貼邊
-                const fixStyle = clonedDoc.createElement('style');
-                fixStyle.innerHTML = `td { padding-top: 14px !important; padding-bottom: 14px !important; }`;
-                clonedDoc.head.appendChild(fixStyle);
-                // -----------------------------------------------------------------
-            }
-        }).then(canvas => {
-            try {
-                canvas.toBlob(function(blob) {
-                    const url = URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.style.display = 'none'; link.href = url;
-                    link.download = `aHUS_Assessment_${new Date().toISOString().slice(0,10)}.png`;
-                    document.body.appendChild(link); link.click();
-                    setTimeout(() => { document.body.removeChild(link); window.URL.revokeObjectURL(url); setFabLoading(false, 'btnImage'); }, 100);
-                }, 'image/png', 1.0);
-            } catch (e) {
-                const imgData = canvas.toDataURL('image/png');
-                const link = document.createElement('a');
-                link.href = imgData; link.download = `aHUS_Assessment_${new Date().toISOString().slice(0,10)}.png`;
-                document.body.appendChild(link); link.click(); document.body.removeChild(link);
-                setFabLoading(false, 'btnImage');
+        // --- NEW: 匯出前強制在「真實畫面」展開所有隱藏區塊，讓 Chart.js 有實體尺寸進行渲染 ---
+        const originallyHidden = [];
+        document.querySelectorAll('.section-content').forEach(sec => {
+            if (sec.classList.contains('hidden')) {
+                originallyHidden.push(sec);
+                sec.classList.remove('hidden');
             }
         });
+
+        // 強制圖表重新計算尺寸以填滿剛展開的區塊
+        Object.values(charts).forEach(c => {
+            if (c && typeof c.resize === 'function') c.resize();
+        });
+
+        // 給予瀏覽器與 Chart.js 緩衝時間進行渲染 (500ms)，確保圖表不會空白
+        setTimeout(() => {
+            html2canvas(element, {
+                scale: 2, 
+                useCORS: true, 
+                logging: false, 
+                backgroundColor: '#f1f5f9',
+                width: targetWidth,
+                windowWidth: targetWidth, 
+                onclone: (clonedDoc) => {
+                    const toggleBadges = clonedDoc.querySelectorAll('.toggle-badge');
+                    toggleBadges.forEach(badge => badge.style.display = 'none');
+
+                    // 移除 UI 防呆用的進度標籤與黃色底色，讓畫面保持專業
+                    clonedDoc.querySelectorAll('.prog-badge').forEach(badge => badge.remove());
+                    clonedDoc.querySelectorAll('.unfilled-highlight').forEach(el => el.classList.remove('unfilled-highlight'));
+
+                    const clonedElement = clonedDoc.getElementById('mainContent');
+                    clonedElement.style.width = targetWidth + 'px';
+                    clonedElement.style.maxWidth = 'none';
+                    clonedElement.style.padding = '20px 40px'; 
+
+                    // --- 解決圖表不顯示或截斷優化：將 Canvas 完美轉換為靜態 Img ---
+                    const originalCanvases = document.querySelectorAll('canvas');
+                    const clonedCanvases = clonedDoc.querySelectorAll('canvas');
+                    originalCanvases.forEach((canvas, i) => {
+                        if(clonedCanvases[i]) {
+                            const img = clonedDoc.createElement('img');
+                            try { img.src = canvas.toDataURL('image/png', 1.0); } catch(e){}
+                            img.style.width = canvas.style.width || canvas.clientWidth + 'px';
+                            img.style.height = canvas.style.height || canvas.clientHeight + 'px';
+                            img.style.display = 'block';
+                            img.style.margin = '0 auto';
+                            clonedCanvases[i].parentNode.replaceChild(img, clonedCanvases[i]);
+                        }
+                    });
+
+                    // --- 解決文字截斷優化：將輸入框替換為靜態 div 以確保完美渲染 ---
+                    const inputs = clonedDoc.querySelectorAll('input:not([type="radio"]):not([type="checkbox"]), select');
+                    inputs.forEach(input => {
+                        const div = clonedDoc.createElement('div');
+                        let val = input.value;
+                        if (input.tagName === 'SELECT') {
+                            val = input.options[input.selectedIndex]?.text || '';
+                            if (val === '請選擇') val = '';
+                        }
+                        div.innerText = val || ' '; // 空值塞入空白以撐開高度
+                        // 賦予與輸入框相同的 CSS 樣式，並設定垂直置中
+                        div.style.cssText = `
+                            width: 100%; border: 1.5px solid #cbd5e1; border-radius: 6px;
+                            padding: 10px 8px; font-size: 14px; background-color: #fff;
+                            box-sizing: border-box; min-height: 44px; display: flex;
+                            align-items: center; color: #1e293b; word-break: break-word;
+                            line-height: 1.4;
+                        `;
+                        input.parentNode.replaceChild(div, input);
+                    });
+                    
+                    // 額外增加表格儲存格的上下內距，防止其他文字貼邊
+                    const fixStyle = clonedDoc.createElement('style');
+                    fixStyle.innerHTML = `td { padding-top: 14px !important; padding-bottom: 14px !important; }`;
+                    clonedDoc.head.appendChild(fixStyle);
+                }
+            }).then(canvas => {
+                try {
+                    canvas.toBlob(function(blob) {
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.style.display = 'none'; link.href = url;
+                        link.download = `aHUS_Assessment_${new Date().toISOString().slice(0,10)}.png`;
+                        document.body.appendChild(link); link.click();
+                        setTimeout(() => { 
+                            document.body.removeChild(link); 
+                            window.URL.revokeObjectURL(url); 
+                            originallyHidden.forEach(sec => sec.classList.add('hidden')); // 還原顯示狀態
+                            setFabLoading(false, 'btnImage'); 
+                        }, 100);
+                    }, 'image/png', 1.0);
+                } catch (e) {
+                    const imgData = canvas.toDataURL('image/png');
+                    const link = document.createElement('a');
+                    link.href = imgData; link.download = `aHUS_Assessment_${new Date().toISOString().slice(0,10)}.png`;
+                    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+                    originallyHidden.forEach(sec => sec.classList.add('hidden')); // 還原顯示狀態
+                    setFabLoading(false, 'btnImage');
+                }
+            }).catch(() => {
+                originallyHidden.forEach(sec => sec.classList.add('hidden')); // 還原顯示狀態
+                setFabLoading(false, 'btnImage');
+            });
+        }, 500);
     }
 
     // 匯出為 PDF 檔案功能
@@ -1507,84 +1669,118 @@
         
         setFabLoading(true, 'btnPdf');
 
-        html2canvas(element, {
-            scale: 2, 
-            useCORS: true, 
-            logging: false, 
-            backgroundColor: '#f1f5f9',
-            width: targetWidth,
-            windowWidth: targetWidth, 
-            onclone: (clonedDoc) => {
-                const clonedSections = clonedDoc.querySelectorAll('.section-content');
-                clonedSections.forEach(sec => sec.classList.remove('hidden'));
-
-                const toggleBadges = clonedDoc.querySelectorAll('.toggle-badge');
-                toggleBadges.forEach(badge => badge.style.display = 'none');
-
-                // 移除 UI 防呆用的進度標籤與黃色底色，讓畫面保持專業
-                clonedDoc.querySelectorAll('.prog-badge').forEach(badge => badge.remove());
-                clonedDoc.querySelectorAll('.unfilled-highlight').forEach(el => el.classList.remove('unfilled-highlight'));
-
-                const clonedElement = clonedDoc.getElementById('mainContent');
-                clonedElement.style.width = targetWidth + 'px';
-                clonedElement.style.maxWidth = 'none';
-                clonedElement.style.padding = '20px 40px'; 
-
-                // --- 解決文字截斷優化：將輸入框替換為靜態 div 以確保完美渲染 ---
-                const inputs = clonedDoc.querySelectorAll('input:not([type="radio"]):not([type="checkbox"]), select');
-                inputs.forEach(input => {
-                    const div = clonedDoc.createElement('div');
-                    let val = input.value;
-                    if (input.tagName === 'SELECT') {
-                        val = input.options[input.selectedIndex]?.text || '';
-                        if (val === '請選擇') val = '';
-                    }
-                    div.innerText = val || ' '; // 空值塞入空白以撐開高度
-                    // 賦予與輸入框相同的 CSS 樣式，並設定垂直置中
-                    div.style.cssText = `
-                        width: 100%; border: 1.5px solid #cbd5e1; border-radius: 6px;
-                        padding: 10px 8px; font-size: 14px; background-color: #fff;
-                        box-sizing: border-box; min-height: 44px; display: flex;
-                        align-items: center; color: #1e293b; word-break: break-word;
-                        line-height: 1.4;
-                    `;
-                    input.parentNode.replaceChild(div, input);
-                });
-                
-                // 額外增加表格儲存格的上下內距，防止其他文字貼邊
-                const fixStyle = clonedDoc.createElement('style');
-                fixStyle.innerHTML = `td { padding-top: 14px !important; padding-bottom: 14px !important; }`;
-                clonedDoc.head.appendChild(fixStyle);
-                // -----------------------------------------------------------------
+        // --- NEW: 匯出前強制在「真實畫面」展開所有隱藏區塊，讓 Chart.js 有實體尺寸進行渲染 ---
+        const originallyHidden = [];
+        document.querySelectorAll('.section-content').forEach(sec => {
+            if (sec.classList.contains('hidden')) {
+                originallyHidden.push(sec);
+                sec.classList.remove('hidden');
             }
-        }).then(canvas => {
-            const imgData = canvas.toDataURL('image/png');
-            
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
-            
-            const imgWidth = canvas.width;
-            const imgHeight = canvas.height;
-            const ratio = imgWidth / pdfWidth;
-            const scaledHeight = imgHeight / ratio;
-            
-            let heightLeft = scaledHeight;
-            let position = 0;
-            
-            pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, scaledHeight);
-            heightLeft -= pdfHeight;
-            
-            while (heightLeft > 0) {
-                position = heightLeft - scaledHeight;
-                pdf.addPage();
+        });
+
+        // 強制圖表重新計算尺寸以填滿剛展開的區塊
+        Object.values(charts).forEach(c => {
+            if (c && typeof c.resize === 'function') c.resize();
+        });
+
+        // 給予瀏覽器與 Chart.js 緩衝時間進行渲染 (500ms)
+        setTimeout(() => {
+            html2canvas(element, {
+                scale: 2, 
+                useCORS: true, 
+                logging: false, 
+                backgroundColor: '#f1f5f9',
+                width: targetWidth,
+                windowWidth: targetWidth, 
+                onclone: (clonedDoc) => {
+                    const toggleBadges = clonedDoc.querySelectorAll('.toggle-badge');
+                    toggleBadges.forEach(badge => badge.style.display = 'none');
+
+                    // 移除 UI 防呆用的進度標籤與黃色底色，讓畫面保持專業
+                    clonedDoc.querySelectorAll('.prog-badge').forEach(badge => badge.remove());
+                    clonedDoc.querySelectorAll('.unfilled-highlight').forEach(el => el.classList.remove('unfilled-highlight'));
+
+                    const clonedElement = clonedDoc.getElementById('mainContent');
+                    clonedElement.style.width = targetWidth + 'px';
+                    clonedElement.style.maxWidth = 'none';
+                    clonedElement.style.padding = '20px 40px'; 
+
+                    // --- 解決圖表不顯示或截斷優化：將 Canvas 完美轉換為靜態 Img ---
+                    const originalCanvases = document.querySelectorAll('canvas');
+                    const clonedCanvases = clonedDoc.querySelectorAll('canvas');
+                    originalCanvases.forEach((canvas, i) => {
+                        if(clonedCanvases[i]) {
+                            const img = clonedDoc.createElement('img');
+                            try { img.src = canvas.toDataURL('image/png', 1.0); } catch(e){}
+                            img.style.width = canvas.style.width || canvas.clientWidth + 'px';
+                            img.style.height = canvas.style.height || canvas.clientHeight + 'px';
+                            img.style.display = 'block';
+                            img.style.margin = '0 auto';
+                            clonedCanvases[i].parentNode.replaceChild(img, clonedCanvases[i]);
+                        }
+                    });
+
+                    // --- 解決文字截斷優化：將輸入框替換為靜態 div 以確保完美渲染 ---
+                    const inputs = clonedDoc.querySelectorAll('input:not([type="radio"]):not([type="checkbox"]), select');
+                    inputs.forEach(input => {
+                        const div = clonedDoc.createElement('div');
+                        let val = input.value;
+                        if (input.tagName === 'SELECT') {
+                            val = input.options[input.selectedIndex]?.text || '';
+                            if (val === '請選擇') val = '';
+                        }
+                        div.innerText = val || ' '; // 空值塞入空白以撐開高度
+                        // 賦予與輸入框相同的 CSS 樣式，並設定垂直置中
+                        div.style.cssText = `
+                            width: 100%; border: 1.5px solid #cbd5e1; border-radius: 6px;
+                            padding: 10px 8px; font-size: 14px; background-color: #fff;
+                            box-sizing: border-box; min-height: 44px; display: flex;
+                            align-items: center; color: #1e293b; word-break: break-word;
+                            line-height: 1.4;
+                        `;
+                        input.parentNode.replaceChild(div, input);
+                    });
+                    
+                    // 額外增加表格儲存格的上下內距，防止其他文字貼邊
+                    const fixStyle = clonedDoc.createElement('style');
+                    fixStyle.innerHTML = `td { padding-top: 14px !important; padding-bottom: 14px !important; }`;
+                    clonedDoc.head.appendChild(fixStyle);
+                }
+            }).then(canvas => {
+                const imgData = canvas.toDataURL('image/png');
+                
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = pdf.internal.pageSize.getHeight();
+                
+                const imgWidth = canvas.width;
+                const imgHeight = canvas.height;
+                const ratio = imgWidth / pdfWidth;
+                const scaledHeight = imgHeight / ratio;
+                
+                let heightLeft = scaledHeight;
+                let position = 0;
+                
                 pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, scaledHeight);
                 heightLeft -= pdfHeight;
-            }
-            
-            pdf.save(`aHUS_Assessment_${new Date().toISOString().slice(0,10)}.pdf`);
-            setFabLoading(false, 'btnPdf');
-        }).catch(() => { setFabLoading(false, 'btnPdf'); });
+                
+                while (heightLeft > 0) {
+                    position = heightLeft - scaledHeight;
+                    pdf.addPage();
+                    pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, scaledHeight);
+                    heightLeft -= pdfHeight;
+                }
+                
+                pdf.save(`aHUS_Assessment_${new Date().toISOString().slice(0,10)}.pdf`);
+                
+                // 還原原本隱藏的區塊
+                originallyHidden.forEach(sec => sec.classList.add('hidden'));
+                setFabLoading(false, 'btnPdf');
+            }).catch(() => { 
+                originallyHidden.forEach(sec => sec.classList.add('hidden')); // 還原顯示狀態
+                setFabLoading(false, 'btnPdf'); 
+            });
+        }, 500);
     }
 
     // 匯出為 Excel 檔案功能
@@ -1634,6 +1830,12 @@
             originalTable.querySelectorAll('.bg-slate-800').forEach(el => {
                 el.style.backgroundColor = '#1e293b';
                 el.style.color = '#ffffff';
+            });
+
+            // 5. 核心優化：植入微軟神級內碼，強制所有包含日期的欄位為「純文字格式」，阻絕 Excel 竄改日期
+            originalTable.querySelectorAll('td[data-label="評估日期"], .auto-date').forEach(el => {
+                const td = el.tagName === 'TD' ? el : el.closest('td');
+                if (td) td.style.cssText += 'mso-number-format:"\\@";';
             });
 
             const html = `
@@ -1714,16 +1916,16 @@
         if (count > 21) count = 21; 
 
         let currentRow = inputEl.closest('tr');
-        const today = new Date().toISOString().split('T')[0];
         const titleName = type === 'pt' ? 'PT' : 'PE';
 
+        // 💡 採納建議：取消 value="${today}" 的預設綁定，讓資料保持空白，確保手動或 Excel 匯入時不被預設日期掩蓋
         for (let i = 1; i <= count; i++) {
             const newRow = document.createElement('tr');
             newRow.className = `dynamic-row-${type}`; 
             
             newRow.innerHTML = `
                 <td class="item-header md:pl-8 text-slate-500 text-xs md:text-sm border-l-2 border-teal-200 bg-slate-50/50">↳ ${titleName} 明細 (${i})</td>
-                <td data-label="評估日期" class="bg-slate-50/50"><input type="date" class="auto-date" value="${today}" onchange="updateCharts()"></td>
+                <td data-label="評估日期" class="bg-slate-50/50"><input type="date" class="auto-date" onchange="updateCharts()"></td>
                 <td data-label="評估紀錄" class="bg-slate-50/50 flex items-center md:table-cell font-medium text-slate-600 justify-end md:text-left">第 ${i} 次治療</td>
                 <td data-label="核對結果" class="result-cell bg-slate-50/50"></td>
             `;
@@ -2052,8 +2254,8 @@
             });
             const labData = dates.map((d, i) => ({ date: d, val: values[i] })).filter(x => x.date && x.val !== null);
             
-            // 獨立時間軸: 只包含治療日期 + 該項目的檢驗日期
-            let chartDatesSet = new Set([...treatmentDates, ...labData.map(x=>x.date)]);
+            // 獨立時間軸: 以檢測時間為主，治療明細為輔 (聯集兩者，確保數據曲線完整呈現)
+            let chartDatesSet = new Set([...labData.map(x => x.date), ...treatmentDates]);
             chartDatesSet.delete("");
             let chartSortedDates = Array.from(chartDatesSet).sort();
 
