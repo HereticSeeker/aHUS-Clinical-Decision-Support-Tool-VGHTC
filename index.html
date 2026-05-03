@@ -7,6 +7,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- 引入 jsPDF 用於 PDF 匯出功能 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
@@ -115,14 +117,35 @@
         .text-warning { color: var(--warning-amber); }
         .text-neutral { color: var(--medical-text-muted); }
 
-        .fab-container { position: fixed; bottom: 20px; right: 20px; z-index: 1000; }
-        .fab-main {
-            width: 50px; height: 50px; background: var(--theme-primary); border-radius: 14px;
-            box-shadow: 0 6px 16px rgba(38, 140, 133, 0.3); display: flex;
+        /* =========================================================
+           三個獨立的懸浮按鈕樣式 (FAB)
+           ========================================================= */
+        .fab-container { position: fixed; bottom: 20px; right: 20px; z-index: 1000; display: flex; flex-direction: column; gap: 14px; align-items: flex-end; }
+        
+        .fab-btn {
+            width: 52px; height: 52px; border-radius: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: flex;
             align-items: center; justify-content: center; color: white; cursor: pointer;
-            transition: transform 0.2s, background-color 0.2s;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); position: relative; border: 1px solid rgba(255,255,255,0.2);
         }
-        .fab-main:hover { transform: scale(1.05); background-color: #1d6b65; }
+        .fab-btn:hover { transform: scale(1.08) translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.2); border-radius: 50%; }
+        
+        .fab-btn.excel { background: #10b981; }
+        .fab-btn.excel:hover { background: #059669; }
+        
+        .fab-btn.pdf { background: #ef4444; }
+        .fab-btn.pdf:hover { background: #dc2626; }
+        
+        .fab-btn.image { background: var(--theme-primary); }
+        .fab-btn.image:hover { background: #1d6b65; }
+        
+        .fab-tooltip {
+            position: absolute; right: 64px; background: rgba(30, 41, 59, 0.85);
+            color: white; padding: 6px 12px; border-radius: 8px; font-size: 13px;
+            white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity 0.2s, transform 0.2s;
+            font-weight: 600; box-shadow: 0 2px 6px rgba(0,0,0,0.15); transform: translateX(10px);
+        }
+        .fab-btn:hover .fab-tooltip { opacity: 1; transform: translateX(0); }
 
         .chart-card { background: #ffffff; border-radius: 16px; padding: 15px; margin-bottom: 20px; border: 1px solid var(--medical-border); box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
         .chart-title { font-size: 15px; font-weight: 700; display: flex; align-items: center; margin-bottom: 12px; }
@@ -145,6 +168,26 @@
         .gauge-progress { fill: none; stroke: var(--theme-primary); stroke-width: 8; stroke-linecap: round; transition: stroke-dashoffset 0.8s ease-out; }
         .theme-accent-border { border-top: 4px solid var(--theme-primary); }
 
+        /* 新增：未填寫防呆高亮樣式 */
+        .unfilled-highlight {
+            background-color: #fef9c3 !important; /* Tailwind yellow-100 */
+            border-color: #facc15 !important; /* Tailwind yellow-400 */
+            transition: all 0.3s ease;
+        }
+        .unfilled-highlight::placeholder {
+            color: #ca8a04 !important; /* Tailwind yellow-600 */
+            opacity: 0.7;
+        }
+        .prog-badge {
+            transition: all 0.3s ease;
+        }
+        .prog-complete {
+            background-color: #d1fae5; color: #047857; border-color: #a7f3d0;
+        }
+        .prog-incomplete {
+            background-color: #fef3c7; color: #b45309; border-color: #fde68a;
+        }
+
         /* =========================================================
            無滑動卡片化響應式核心邏輯 (Responsive Card Layout)
            ========================================================= */
@@ -163,7 +206,7 @@
             .label-row { display: none !important; }
 
             /* 每一個 tr 變成一張獨立的醫學數據卡片 */
-            tbody tr {
+            tbody.section-content tr {
                 margin-bottom: 1rem;
                 border: 1px solid var(--medical-border);
                 border-radius: 0.75rem;
@@ -223,22 +266,43 @@
             td.result-cell { justify-content: flex-end; font-size: 14px; }
             
             /* PLASMIC Score 特殊卡片排版 */
-            .plasmic-table tr { display: flex; flex-wrap: wrap; }
+            .plasmic-table tr { display: flex; flex-wrap: wrap; margin-bottom: 1rem; border: 1px solid var(--medical-border); border-radius: 0.75rem; background: #ffffff; box-shadow: 0 4px 10px rgba(0,0,0,0.04); overflow: hidden; }
             .plasmic-table td.item-header { width: 100%; color: var(--theme-dark); }
             .plasmic-table td[data-label] { width: 50%; flex-direction: column; justify-content: center; gap: 0.5rem; }
             .plasmic-table td[data-label]::before { width: 100%; text-align: center; }
-            .score-row { display: block; }
+            .score-row { display: block; border-radius: 0.75rem;}
             .score-row td { display: block; width: 100%; text-align: center; justify-content: center; border: none !important;}
         }
 
         @media print { .no-print { display: none !important; } body { background: white; padding: 0;} .a4-container { padding: 0;} }
+
+        @keyframes slideDownAlert {
+            0% { opacity: 0; transform: translate(-50%, -20px); }
+            10% { opacity: 1; transform: translate(-50%, 0); }
+            90% { opacity: 1; transform: translate(-50%, 0); }
+            100% { opacity: 0; transform: translate(-50%, -20px); }
+        }
+        .animate-slide-alert { animation: slideDownAlert 3.5s ease-in-out forwards; }
     </style>
 </head>
 <body>
 
+<!-- 獨立的三個懸浮按鈕 (FAB) -->
 <div class="fab-container no-print">
-    <div class="fab-main" onclick="exportToImage()" title="保存為完整報告圖檔">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+    <div class="fab-btn excel" id="btnExcel" onclick="exportToExcel()">
+        <svg class="w-6 h-6 main-icon transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+        <svg class="w-6 h-6 animate-spin hidden loading-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+        <span class="fab-tooltip">匯出 Excel</span>
+    </div>
+    <div class="fab-btn pdf" id="btnPdf" onclick="exportToPDF()">
+        <svg class="w-6 h-6 main-icon transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+        <svg class="w-6 h-6 animate-spin hidden loading-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+        <span class="fab-tooltip">匯出 PDF 檔案</span>
+    </div>
+    <div class="fab-btn image" id="btnImage" onclick="exportToImage()">
+        <svg class="w-6 h-6 main-icon transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+        <svg class="w-6 h-6 animate-spin hidden loading-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+        <span class="fab-tooltip">儲存為長圖檔</span>
     </div>
 </div>
 
@@ -246,8 +310,18 @@
     <form id="checklistForm">
         <header class="mb-6 text-center pt-2 md:pt-4">
             <h1 class="text-xl md:text-2xl font-extrabold text-slate-900 mb-1">aHUS 罕病通報/健保審查條件評估工具</h1>
-            <p class="text-slate-500 font-medium text-xs md:text-sm">Clinical Decision Support Tool</p>
-            <div class="w-24 md:w-32 h-1 bg-[var(--theme-accent)] mx-auto mt-2 rounded-full"></div>
+            <p class="text-slate-500 font-medium text-xs md:text-sm mb-4">Clinical Decision Support Tool</p>
+            
+            <!-- 新增：上傳前次匯出之Excel評估表 按鈕 -->
+            <div class="flex justify-center no-print">
+                <label class="cursor-pointer flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 text-[var(--theme-primary)] border border-teal-200 rounded-lg text-sm font-bold shadow-sm transition-all hover:shadow">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                    上傳前次匯出之Excel評估表
+                    <input type="file" id="uploadExcel" accept=".xls,.html" class="hidden" onchange="importFromExcel(event)">
+                </label>
+            </div>
+
+            <div class="w-24 md:w-32 h-1 bg-[var(--theme-accent)] mx-auto mt-5 rounded-full"></div>
         </header>
 
         <!-- 患者基本資訊區塊 -->
@@ -278,14 +352,18 @@
 
         <!-- aHUS 罕病健保事審條件檢核表 -->
         <div class="glass-card border-2 border-teal-100 mb-6">
-            <header class="bg-slate-50 px-4 py-3 md:px-5 border-b border-slate-200">
-                <h3 class="text-base md:text-lg font-bold text-slate-800 flex items-center gap-2">
+            <header class="bg-slate-50 px-4 py-3 md:px-5 border-b border-slate-200 cursor-pointer select-none flex items-center justify-between" onclick="toggleSection('sec-nhi-checklist', 'icon-nhi-checklist')">
+                <h3 class="text-base md:text-lg font-bold text-slate-800 flex items-center gap-2 mb-0">
                     <svg class="w-5 h-5 text-[var(--theme-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
                     aHUS 罕病健保事審條件檢核表
                 </h3>
+                <div class="flex items-center gap-1.5 md:gap-2 text-[var(--theme-primary)] toggle-badge">
+                    <span class="text-[10px] md:text-[11px] font-bold bg-teal-50 px-2 py-0.5 rounded border border-teal-200 shadow-sm hidden sm:inline-block">展開 / 縮小明細</span>
+                    <svg id="icon-nhi-checklist" class="w-5 h-5 transition-transform duration-300 toggle-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+                </div>
             </header>
             <div class="p-4 md:p-5">
-                <div class="flex flex-col md:flex-row gap-6 md:gap-8 items-center mb-6">
+                <div class="flex flex-col md:flex-row gap-6 md:gap-8 items-center mb-4 md:mb-6">
                     <div class="compliance-gauge">
                         <svg class="gauge-svg" width="100%" height="100%" viewBox="0 0 100 100">
                             <circle class="gauge-bg" cx="50" cy="50" r="44"></circle>
@@ -310,322 +388,600 @@
                         </div>
                     </div>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
-                    <div class="space-y-6">
-                        <div>
-                            <h4 class="text-xs font-bold text-[var(--theme-dark)] mb-2 border-l-4 border-[var(--theme-primary)] pl-2 uppercase">I. 給付對象核對 (治療反應不佳判定)</h4>
-                            <div id="list-eligibility" class="space-y-1"></div>
+                
+                <div id="sec-nhi-checklist" class="section-content hidden">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+                        <div class="space-y-6">
+                            <div>
+                                <h4 class="text-xs font-bold text-[var(--theme-dark)] mb-2 border-l-4 border-[var(--theme-primary)] pl-2 uppercase">I. 給付對象核對 (治療反應不佳判定)</h4>
+                                <div id="list-eligibility" class="space-y-1"></div>
+                            </div>
+                            <div>
+                                <h4 class="text-xs font-bold text-[var(--theme-dark)] mb-2 border-l-4 border-[var(--theme-primary)] pl-2 uppercase">II. 重症判定 - 必要條件 (共4項)</h4>
+                                <div id="list-essential" class="space-y-1"></div>
+                            </div>
+                            <div>
+                                <h4 class="text-xs font-bold text-[var(--theme-dark)] mb-2 border-l-4 border-[var(--theme-primary)] pl-2 uppercase">V. TMA判定 (輔助檢測)</h4>
+                                <div id="list-tma-判定" class="space-y-1"></div>
+                            </div>
                         </div>
-                        <div>
-                            <h4 class="text-xs font-bold text-[var(--theme-dark)] mb-2 border-l-4 border-[var(--theme-primary)] pl-2 uppercase">II. 重症判定 - 必要條件 (共4項)</h4>
-                            <div id="list-essential" class="space-y-1"></div>
-                        </div>
-                        <div>
-                            <h4 class="text-xs font-bold text-[var(--theme-dark)] mb-2 border-l-4 border-[var(--theme-primary)] pl-2 uppercase">IIII. TMA判定</h4>
-                            <div id="list-tma-判定" class="space-y-1"></div>
-                        </div>
-                    </div>
-                    <div class="space-y-6">
-                        <div>
-                            <h4 class="text-xs font-bold text-[var(--theme-dark)] mb-2 border-l-4 border-[var(--theme-primary)] pl-2 uppercase">III. 重症判定 - 次要條件 (Organ - At least 1)</h4>
-                            <div id="list-organ-damage" class="space-y-1"></div>
-                        </div>
-                        <div>
-                            <h4 class="text-xs font-bold text-[var(--theme-dark)] mb-2 border-l-4 border-[var(--theme-primary)] pl-2 uppercase">IV. 排除診斷核對 (Must Exclude All 7 Items)</h4>
-                            <div id="list-exclusion-detail" class="space-y-1"></div>
+                        <div class="space-y-6">
+                            <div>
+                                <h4 class="text-xs font-bold text-[var(--theme-dark)] mb-2 border-l-4 border-[var(--theme-primary)] pl-2 uppercase">III. 重症判定 - 次要條件 (Organ - At least 1)</h4>
+                                <div id="list-organ-damage" class="space-y-1"></div>
+                            </div>
+                            <div>
+                                <h4 class="text-xs font-bold text-[var(--theme-dark)] mb-2 border-l-4 border-[var(--theme-primary)] pl-2 uppercase">IV. 排除診斷核對 (Must Exclude All 7 Items)</h4>
+                                <div id="list-exclusion-detail" class="space-y-1"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Part 1: Inclusion Tests & Treatments -->
-        <div class="glass-card">
-            <div class="table-responsive">
-                <table>
-                    <colgroup><col width="30%"><col width="20%"><col width="25%"><col width="25%"></colgroup>
-                    <thead>
-                        <tr class="header-main">
-                            <td colspan="4">
-                                <div class="flex items-center justify-between px-2">
-                                    <span>aHUS疑似個案Inclusion tests Checklist</span>
-                                    <button type="button" onclick="resetEntireForm()" class="no-print bg-white/10 hover:bg-white/20 text-white border border-white/30 px-3 py-1 rounded text-[11px] font-bold transition-all shadow-sm">恢復預設</button>
-                                </div>
-                            </td>
-                        </tr>
-                        <tr class="sub-category"><td colspan="4">治療紀錄</td></tr>
-                        <tr class="label-row"><td>治療項目</td><td>評估日期</td><td>紀錄</td><td>條件核對結果</td></tr>
-                    </thead>
-                    <tbody>
-                        <tr><td class="item-header">Plasma Transfusion (施行次數/週)</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><input type="number" inputmode="decimal" oninput="logicCheck(this, 'treatment')" id="in_pt_count" placeholder="輸入數值"></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
-                        <tr><td class="item-header">Plasma Exchange (施行次數/週)</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><input type="number" inputmode="decimal" oninput="logicCheck(this, 'treatment')" id="in_pe_count" placeholder="輸入數值"></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
-                        <tr><td class="item-header">HD (施行次數/週)</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select id="in_hd_count" onchange="calculateNHICompliance()"><option value="">請選擇</option><script>for(let i=1;i<=7;i++)document.write(`<option value="${i}">${i}次</option>`)</script></select></td><td data-label="核對結果" class="bg-slate-50 text-slate-400 italic text-center text-xs result-cell flex items-center justify-center">不顯示判定</td></tr>
-
-                        <tr class="sub-category"><td colspan="4">臨床表徵</td></tr>
-                        <tr class="label-row"><td>評估項目</td><td>評估日期</td><td>紀錄</td><td>條件核對結果</td></tr>
-                        <tr><td class="item-header">器官損傷</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'organ')" id="in_organ_count"><option value="">請選擇</option><option value="無異常">無異常</option><option value="1處">1處</option><option value="2處">2處</option><option value="3處">3處</option><option value="4處">4處</option><option value="5處">5處</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
-                        <tr><td class="item-header">腎臟系統</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'system')" id="in_renal_sys"><option value="">請選擇</option><option value="無異常">無異常</option><option value="AKI第一期">AKI第一期</option><option value="AKI第二期">AKI第二期</option><option value="AKI第三期">AKI第三期</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
-                        <tr><td class="item-header">腸胃系統</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'system')" id="in_gi_sys"><option value="">請選擇</option><option value="無異常">無異常</option><option value="腹痛、噁心、嘔吐">腹痛、噁心、嘔吐</option><option value="血便、消化道出血">血便、消化道出血</option><option value="腸道破裂">腸道破裂</option><option value="缺血性腸炎">缺血性腸炎</option><option value="腸血管栓塞">腸血管栓塞</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
-                        <tr><td class="item-header">神經系統</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'system')" id="in_neuro_sys"><option value="">請選擇</option><option value="無異常">無異常</option><option value="抽蓄(seizure)">抽蓄(seizure)</option><option value="栓塞(infarct)">栓塞(infarct)</option><option value="腦血管病變">腦血管病變</option><option value="其他">其他</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
-                        <tr><td class="item-header">呼吸系統</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'system')" id="in_resp_sys"><option value="">請選擇</option><option value="無異常">無異常</option><option value="呼吸衰竭">呼吸衰竭</option><option value="換氣困難">換氣困難</option><option value="其他">其他</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
-                        <tr><td class="item-header">心臟系統</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'system')" id="in_heart_sys"><option value="">請選擇</option><option value="無異常">無異常</option><option value="急性心衰竭">急性心衰竭</option><option value="急性心肺障礙">急性心肺障礙</option><option value="心律傳導障礙">心律傳導障礙</option><option value="其他">其他</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
-                        <tr><td class="item-header">眼睛病變</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'system')"><option value="">請選擇</option><option value="無異常">無異常</option><option value="急性視網膜病變">急性視網膜病變</option><option value="脈較膜血管栓塞">脈較膜血管栓塞</option><option value="視神經盤水腫">視神經盤水腫</option><option value="玻璃體出血">玻璃體出血</option><option value="其他眼部症狀">其他眼部症狀</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
-                    </tbody>
-                </table>
-            </div>
+        <!-- 獨立的重置按鈕 (移至 Part 1 上方置中) -->
+        <div class="flex justify-center mb-6 no-print">
+            <button type="button" onclick="resetEntireForm()" class="flex items-center gap-2 px-6 py-2.5 bg-white text-slate-600 border border-slate-300 rounded-xl font-bold shadow-sm hover:shadow hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                重置所有欄位資訊
+            </button>
         </div>
 
-        <!-- Part 2: Continuous Monitoring (Rowspan 處理) -->
-        <div class="glass-card">
-            <div class="table-responsive">
-                <table>
-                    <colgroup><col width="30%"><col width="20%"><col width="25%"><col width="25%"></colgroup>
-                    <thead>
-                        <tr class="sub-category"><td colspan="4">連續監測重要指標</td></tr>
-                        <tr class="label-row"><td>檢驗項目</td><td>評估日期</td><td>紀錄</td><td>條件核對結果</td></tr>
-                    </thead>
-                    <tbody>
-                        <script>
-                            const trendItems = [
-                                { n: "Hemoglobin(g/dL)", c: "hb", l: "sd", p: "12-18", id: "in_hb" },
-                                { n: "Platelet(10^3/μL)", c: "plt", l: "plt", id: "in_plt", p: "150-400" },
-                                { n: "Reticulocyte(%)", c: "retic", l: "retic", id: "in_retic", p: "0.45-2.28%" },
-                                { n: "sCr", c: "scr", l: "scr", id: "in_scr", p: "> 2" },
-                                { n: "LDH", c: "ldh", l: "ldh", p: "125-220", id: "in_ldh" },
-                                { n: "Haptoglobin(g/L)", c: "hap", l: "hap", id: "in_hap", p: "0.3-2.0" },
-                                { n: "血壓", c: "bp", l: "sd", p: "輸入數值" }
-                            ];
-                            trendItems.forEach(t => {
-                                for(let i=0; i<5; i++){
-                                    let inputHtml = '';
-                                    if(t.c === 'bp') {
-                                        inputHtml = `
-                                            <div class="flex gap-1 items-center w-full">
-                                                <input type="number" class="track-bp-sys flex-1 min-w-0 px-1 text-center" inputmode="decimal" oninput="logicCheck(this, 'sd')" placeholder="收縮壓">
-                                                <span class="text-slate-300">/</span>
-                                                <input type="number" class="track-bp-dia flex-1 min-w-0 px-1 text-center" inputmode="decimal" oninput="logicCheck(this, 'sd')" placeholder="舒張壓">
+        <!-- ================= 大區塊 1：Inclusion Tests ================= -->
+        <div class="mb-8 border-2 border-[var(--theme-primary)] rounded-xl overflow-hidden shadow-sm bg-slate-50/50">
+            <div class="major-section-header bg-gradient-to-r from-[var(--theme-dark)] to-[var(--theme-primary)] text-white font-extrabold text-center py-3 text-sm md:text-base uppercase tracking-wider">
+                aHUS疑似個案Inclusion tests Checklist
+            </div>
+            <div class="p-3 md:p-5 flex flex-col gap-4">
+
+                <!-- 獨立卡片 1：治療紀錄 -->
+                <div class="glass-card !mb-0">
+                    <div class="table-responsive">
+                        <table>
+                            <colgroup><col width="30%"><col width="20%"><col width="25%"><col width="25%"></colgroup>
+                            <tbody>
+                                <tr class="sub-category cursor-pointer select-none" onclick="toggleSection('sec-treatment', 'icon-treatment')">
+                                    <td colspan="4">
+                                        <div class="flex items-center justify-between w-full">
+                                            <span>治療紀錄</span>
+                                            <div class="flex items-center gap-1.5 md:gap-2 text-[var(--theme-primary)] toggle-badge">
+                                                <span id="prog-sec-treatment" class="prog-badge text-[10px] md:text-[11px] font-bold px-2 py-0.5 rounded shadow-sm border prog-incomplete">完成 0/0</span>
+                                                <span class="text-[10px] md:text-[11px] font-bold bg-teal-50 px-2 py-0.5 rounded border border-teal-200 shadow-sm hidden sm:inline-block">展開 / 縮小</span>
+                                                <svg id="icon-treatment" class="w-5 h-5 transition-transform duration-300 toggle-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
                                             </div>
-                                        `;
-                                    } else {
-                                        inputHtml = `<input type="text" class="track-${t.c}" inputmode="decimal" ${i===0 && t.id ? `id="${t.id}"` : ''} oninput="logicCheck(this, '${t.l}')" ${t.n.includes('Retic')?'onblur="formatPercent(this)"':''} placeholder="${t.p}">`;
-                                    }
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                            <tbody id="sec-treatment" class="section-content hidden">
+                                <tr class="label-row"><td>治療項目</td><td>評估日期</td><td>紀錄</td><td>條件核對結果</td></tr>
+                                <tr><td class="item-header">Plasma Transfusion (施行次數/週)</td><td data-label="評估日期"><input type="date" class="auto-date" onchange="updateCharts()"></td><td data-label="評估紀錄"><input type="number" inputmode="decimal" oninput="logicCheck(this, 'treatment'); generateTreatmentDates(this, 'pt')" id="in_pt_count" placeholder="輸入數值"></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
+                                <tr><td class="item-header">Plasma Exchange (施行次數/週)</td><td data-label="評估日期"><input type="date" class="auto-date" onchange="updateCharts()"></td><td data-label="評估紀錄"><input type="number" inputmode="decimal" oninput="logicCheck(this, 'treatment'); generateTreatmentDates(this, 'pe')" id="in_pe_count" placeholder="輸入數值"></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
+                                <tr><td class="item-header">HD (施行次數/週)</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select id="in_hd_count" onchange="calculateNHICompliance()"><option value="">請選擇</option><script>for(let i=1;i<=7;i++)document.write(`<option value="${i}">${i}次</option>`)</script></select></td><td data-label="核對結果" class="bg-slate-50 text-slate-400 italic text-center text-xs result-cell flex items-center justify-center">不顯示判定</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
 
-                                    // 使用 Tailwind 的 md 區塊與自定義的 item-header 在不同平台上無縫切換顯示邏輯
-                                    document.write(`<tr>
-                                        ${i===0 ? `<td rowspan="5" class="hidden md:table-cell font-bold text-slate-700 bg-teal-50/30 align-middle text-center border-r border-teal-100">${t.n}</td>` : ''}
-                                        <td class="md:hidden item-header bg-teal-50/50 text-teal-800">${t.n} (第 ${i+1} 次)</td>
-                                        <td data-label="評估日期"><input type="date" class="auto-date date-${t.c}"></td>
-                                        <td data-label="評估紀錄">${inputHtml}</td>
-                                        <td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td>
-                                    </tr>`);
-                                }
-                            });
-                        </script>
-                    </tbody>
-                </table>
+                <!-- 獨立卡片 2：臨床表徵 -->
+                <div class="glass-card !mb-0">
+                    <div class="table-responsive">
+                        <table>
+                            <colgroup><col width="30%"><col width="20%"><col width="25%"><col width="25%"></colgroup>
+                            <tbody>
+                                <tr class="sub-category cursor-pointer select-none" onclick="toggleSection('sec-clinical', 'icon-clinical')">
+                                    <td colspan="4">
+                                        <div class="flex items-center justify-between w-full">
+                                            <span>臨床表徵</span>
+                                            <div class="flex items-center gap-1.5 md:gap-2 text-[var(--theme-primary)] toggle-badge">
+                                                <span id="prog-sec-clinical" class="prog-badge text-[10px] md:text-[11px] font-bold px-2 py-0.5 rounded shadow-sm border prog-incomplete">完成 0/0</span>
+                                                <span class="text-[10px] md:text-[11px] font-bold bg-teal-50 px-2 py-0.5 rounded border border-teal-200 shadow-sm hidden sm:inline-block">展開 / 縮小</span>
+                                                <svg id="icon-clinical" class="w-5 h-5 transition-transform duration-300 toggle-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                            <tbody id="sec-clinical" class="section-content hidden">
+                                <tr class="label-row"><td>評估項目</td><td>評估日期</td><td>紀錄</td><td>條件核對結果</td></tr>
+                                <tr><td class="item-header">器官損傷</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'organ')" id="in_organ_count"><option value="">請選擇</option><option value="無異常">無異常</option><option value="1處">1處</option><option value="2處">2處</option><option value="3處">3處</option><option value="4處">4處</option><option value="5處">5處</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
+                                <tr><td class="item-header">腎臟系統</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'system')" id="in_renal_sys"><option value="">請選擇</option><option value="無異常">無異常</option><option value="AKI第一期">AKI第一期</option><option value="AKI第二期">AKI第二期</option><option value="AKI第三期">AKI第三期</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
+                                <tr><td class="item-header">腸胃系統</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'system')" id="in_gi_sys"><option value="">請選擇</option><option value="無異常">無異常</option><option value="腹痛、噁心、嘔吐">腹痛、噁心、嘔吐</option><option value="血便、消化道出血">血便、消化道出血</option><option value="腸道破裂">腸道破裂</option><option value="缺血性腸炎">缺血性腸炎</option><option value="腸血管栓塞">腸血管栓塞</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
+                                <tr><td class="item-header">神經系統</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'system')" id="in_neuro_sys"><option value="">請選擇</option><option value="無異常">無異常</option><option value="抽蓄(seizure)">抽蓄(seizure)</option><option value="栓塞(infarct)">栓塞(infarct)</option><option value="腦血管病變">腦血管病變</option><option value="其他">其他</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
+                                <tr><td class="item-header">呼吸系統</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'system')" id="in_resp_sys"><option value="">請選擇</option><option value="無異常">無異常</option><option value="呼吸衰竭">呼吸衰竭</option><option value="換氣困難">換氣困難</option><option value="其他">其他</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
+                                <tr><td class="item-header">心臟系統</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'system')" id="in_heart_sys"><option value="">請選擇</option><option value="無異常">無異常</option><option value="急性心衰竭">急性心衰竭</option><option value="急性心肺障礙">急性心肺障礙</option><option value="心律傳導障礙">心律傳導障礙</option><option value="其他">其他</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
+                                <tr><td class="item-header">眼睛病變</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'system')"><option value="">請選擇</option><option value="無異常">無異常</option><option value="急性視網膜病變">急性視網膜病變</option><option value="脈較膜血管栓塞">脈較膜血管栓塞</option><option value="視神經盤水腫">視神經盤水腫</option><option value="玻璃體出血">玻璃體出血</option><option value="其他眼部症狀">其他眼部症狀</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 獨立卡片 3：連續監測重要指標 -->
+                <div class="glass-card !mb-0">
+                    <div class="table-responsive">
+                        <table>
+                            <colgroup><col width="30%"><col width="20%"><col width="25%"><col width="25%"></colgroup>
+                            <tbody>
+                                <tr class="sub-category cursor-pointer select-none" onclick="toggleSection('sec-monitoring', 'icon-monitoring')">
+                                    <td colspan="4">
+                                        <div class="flex items-center justify-between w-full">
+                                            <span>連續監測重要指標(至多5次,建議日期由遠至近完整填寫)</span>
+                                            <div class="flex items-center gap-1.5 md:gap-2 text-[var(--theme-primary)] toggle-badge">
+                                                <span id="prog-sec-monitoring" class="prog-badge text-[10px] md:text-[11px] font-bold px-2 py-0.5 rounded shadow-sm border prog-incomplete">完成 0/0</span>
+                                                <span class="text-[10px] md:text-[11px] font-bold bg-teal-50 px-2 py-0.5 rounded border border-teal-200 shadow-sm hidden sm:inline-block">展開 / 縮小</span>
+                                                <svg id="icon-monitoring" class="w-5 h-5 transition-transform duration-300 toggle-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                            <tbody id="sec-monitoring" class="section-content hidden">
+                                <tr class="label-row"><td>檢驗項目</td><td>評估日期</td><td>紀錄</td><td>條件核對結果</td></tr>
+                                <script>
+                                    window.trendItems = [
+                                        { n: "Hemoglobin(g/dL)", c: "hb", l: "sd", p: "12-18", id: "in_hb" },
+                                        { n: "Platelet(10^3/μL)", c: "plt", l: "plt", id: "in_plt", p: "150-400" },
+                                        { n: "Reticulocyte(%)", c: "retic", l: "retic", id: "in_retic", p: "0.45-2.28%" },
+                                        { n: "sCr", c: "scr", l: "scr", id: "in_scr", p: "> 2" },
+                                        { n: "LDH", c: "ldh", l: "ldh", p: "125-220", id: "in_ldh" },
+                                        { n: "Haptoglobin(g/L)", c: "hap", l: "hap", id: "in_hap", p: "0.3-2.0" },
+                                        { n: "血壓", c: "bp", l: "sd", p: "輸入數值" }
+                                    ];
+                                    window.trendItems.forEach(t => {
+                                        for(let i=0; i<5; i++){
+                                            let inputHtml = '';
+                                            if(t.c === 'bp') {
+                                                inputHtml = `
+                                                    <div class="flex gap-1 items-center w-full">
+                                                        <input type="number" class="track-bp-sys flex-1 min-w-0 px-1 text-center" inputmode="decimal" oninput="logicCheck(this, 'sd'); checkReveal('${t.c}', ${i})" placeholder="收縮壓">
+                                                        <span class="text-slate-300">/</span>
+                                                        <input type="number" class="track-bp-dia flex-1 min-w-0 px-1 text-center" inputmode="decimal" oninput="logicCheck(this, 'sd'); checkReveal('${t.c}', ${i})" placeholder="舒張壓">
+                                                    </div>
+                                                `;
+                                            } else {
+                                                inputHtml = `<input type="text" class="track-${t.c}" inputmode="decimal" ${i===0 && t.id ? `id="${t.id}"` : ''} oninput="logicCheck(this, '${t.l}'); checkReveal('${t.c}', ${i})" ${t.n.includes('Retic')?'onblur="formatPercent(this)"':''} placeholder="${t.p}">`;
+                                            }
+
+                                            document.write(`<tr id="tr-${t.c}-${i}" style="${i > 0 ? 'display: none;' : ''}">
+                                                ${i===0 ? `<td id="td-rs-${t.c}" rowspan="1" class="hidden md:table-cell font-bold text-slate-700 bg-teal-50/30 align-middle text-center border-r border-teal-100">${t.n}</td>` : ''}
+                                                <td class="md:hidden item-header bg-teal-50/50 text-teal-800">${t.n} (第 ${i+1} 次)</td>
+                                                <td data-label="評估日期"><input type="date" class="auto-date date-${t.c}" onchange="updateCharts()"></td>
+                                                <td data-label="評估紀錄">${inputHtml}</td>
+                                                <td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td>
+                                            </tr>`);
+                                        }
+                                    });
+                                </script>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 獨立卡片 4：其他檢測指標 -->
+                <div class="glass-card !mb-0">
+                    <div class="table-responsive">
+                        <table>
+                            <colgroup><col width="30%"><col width="20%"><col width="25%"><col width="25%"></colgroup>
+                            <tbody>
+                                <tr class="sub-category cursor-pointer select-none" onclick="toggleSection('sec-other-lab', 'icon-other-lab')">
+                                    <td colspan="4">
+                                        <div class="flex items-center justify-between w-full">
+                                            <span>其他檢測指標</span>
+                                            <div class="flex items-center gap-1.5 md:gap-2 text-[var(--theme-primary)] toggle-badge">
+                                                <span id="prog-sec-other-lab" class="prog-badge text-[10px] md:text-[11px] font-bold px-2 py-0.5 rounded shadow-sm border prog-incomplete">完成 0/0</span>
+                                                <span class="text-[10px] md:text-[11px] font-bold bg-teal-50 px-2 py-0.5 rounded border border-teal-200 shadow-sm hidden sm:inline-block">展開 / 縮小</span>
+                                                <svg id="icon-other-lab" class="w-5 h-5 transition-transform duration-300 toggle-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                            <tbody id="sec-other-lab" class="section-content hidden">
+                                <tr class="label-row"><td>檢驗項目</td><td>評估日期</td><td>紀錄</td><td>條件核對結果</td></tr>
+                                <script>
+                                    const otherLab = [
+                                        { n: "BUN (mg/dL)", l: "bun", p: "5-25" }, 
+                                        { n: "EGFR (mg/dL)", l: "egfr", p: "> 90" }, 
+                                        { n: "尿蛋白 (mg/dL)", l: "protein", p: "< 14" },
+                                        { n: "AST(U/L)", l: "liver", p: "8-40" }, 
+                                        { n: "ALT(U/L)", l: "liver", p: "8-40" }
+                                    ];
+                                    otherLab.forEach(o => {
+                                        document.write(`<tr><td class="item-header font-medium">${o.n}</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><input type="number" inputmode="decimal" oninput="logicCheck(this, '${o.l}')" placeholder="${o.p}"></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>`);
+                                    });
+                                </script>
+                                <tr>
+                                    <td class="item-header font-medium">Total bilirubin (mg/dL)</td>
+                                    <td data-label="評估日期"><input type="date" class="auto-date"></td>
+                                    <td data-label="評估紀錄"><input type="number" inputmode="decimal" id="in_tbil" oninput="handleBilirubin('total')" placeholder="0.2-1.2"></td>
+                                    <td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]" id="res_tbil"></td>
+                                </tr>
+                                <tr>
+                                    <td class="item-header font-medium">Indirect bilirubin (mg/dL)</td>
+                                    <td data-label="評估日期"><input type="date" class="auto-date"></td>
+                                    <td data-label="評估紀錄"><input type="number" inputmode="decimal" id="in_ibil" oninput="handleBilirubin('indirect')" placeholder="0.2-1.0"></td>
+                                    <td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]" id="res_ibil"></td>
+                                </tr>
+                                <tr>
+                                    <td class="item-header font-medium">Direct bilirubin (mg/dL)</td>
+                                    <td data-label="評估日期"><input type="date" class="auto-date"></td>
+                                    <td data-label="評估紀錄"><input type="number" inputmode="decimal" id="in_dbil" oninput="handleBilirubin('direct')" placeholder="0-0.5"></td>
+                                    <td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]" id="res_dbil"></td>
+                                </tr>
+                                <tr><td class="item-header font-medium">Schistocyte(%)</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'schisto')" id="in_schisto"><option value="">請選擇</option><option value="未檢測">未檢測</option><option value="Negative">Negative</option><option value="Postive">Postive</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 獨立卡片 5：基因檢測 / Biopsy / Medical Imaging -->
+                <div class="glass-card !mb-0">
+                    <div class="table-responsive">
+                        <table>
+                            <colgroup><col width="30%"><col width="20%"><col width="25%"><col width="25%"></colgroup>
+                            <tbody>
+                                <tr class="sub-category cursor-pointer select-none" onclick="toggleSection('sec-gene', 'icon-gene')">
+                                    <td colspan="4">
+                                        <div class="flex items-center justify-between w-full">
+                                            <span>基因檢測 / Biopsy / Medical Imaging</span>
+                                            <div class="flex items-center gap-1.5 md:gap-2 text-[var(--theme-primary)] toggle-badge">
+                                                <span id="prog-sec-gene" class="prog-badge text-[10px] md:text-[11px] font-bold px-2 py-0.5 rounded shadow-sm border prog-incomplete">完成 0/0</span>
+                                                <span class="text-[10px] md:text-[11px] font-bold bg-teal-50 px-2 py-0.5 rounded border border-teal-200 shadow-sm hidden sm:inline-block">展開 / 縮小</span>
+                                                <svg id="icon-gene" class="w-5 h-5 transition-transform duration-300 toggle-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                            <tbody id="sec-gene" class="section-content hidden">
+                                <tr class="label-row"><td>評估項目</td><td>評估日期</td><td>紀錄</td><td>條件核對結果</td></tr>
+                                <tr><td class="item-header font-medium">aHUS相關基因</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'gene')"><option value="">請選擇</option><option value="未檢測">未檢測</option><option value="Negative">Negative</option><option value="Postive">Postive</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
+                                <script>
+                                    const biopsyItems = [
+                                        { n: "Renal biopsy", id: "in_renal_biopsy" },
+                                        { n: "Other biopsy", id: "in_other_biopsy" },
+                                        { n: "Brain CT or MRI", id: "in_brain_imaging" },
+                                        { n: "Other CT or MRI", id: "in_other_imaging" }
+                                    ];
+                                    biopsyItems.forEach(x => {
+                                        document.write(`<tr><td class="item-header font-medium">${x.n}</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select id="${x.id}" onchange="logicCheck(this, 'biopsy')"><option value="">請選擇</option><option value="未施行">未施行</option><option value="無異常">無異常</option><option value="Thrombosis">Thrombosis</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>`);
+                                    });
+                                    ["EKG", "Heart sonography"].forEach(x => {
+                                        document.write(`<tr><td class="item-header font-medium">${x}</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'heart')"><option value="">請選擇</option><option value="未施行">未施行</option><option value="異常">異常</option><option value="正常">正常</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>`);
+                                    });
+                                </script>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
             </div>
         </div>
 
-        <!-- Part 3: Other Lab Tests -->
-        <div class="glass-card">
-            <div class="table-responsive">
-                <table>
-                    <colgroup><col width="30%"><col width="20%"><col width="25%"><col width="25%"></colgroup>
-                    <thead><tr class="sub-category"><td colspan="4">其他檢測指標</td></tr></thead>
-                    <tbody>
-                        <script>
-                            const otherLab = [
-                                { n: "BUN (mg/dL)", l: "bun", p: "5-25" }, 
-                                { n: "EGFR (mg/dL)", l: "egfr", p: "> 90" }, 
-                                { n: "尿蛋白 (mg/dL)", l: "protein", p: "< 14" },
-                                { n: "AST(U/L)", l: "liver", p: "8-40" }, 
-                                { n: "ALT(U/L)", l: "liver", p: "8-40" }
-                            ];
-                            otherLab.forEach(o => {
-                                document.write(`<tr><td class="item-header font-medium">${o.n}</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><input type="number" inputmode="decimal" oninput="logicCheck(this, '${o.l}')" placeholder="${o.p}"></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>`);
-                            });
-                        </script>
-                        <tr>
-                            <td class="item-header font-medium">Total bilirubin (mg/dL)</td>
-                            <td data-label="評估日期"><input type="date" class="auto-date"></td>
-                            <td data-label="評估紀錄"><input type="number" inputmode="decimal" id="in_tbil" oninput="handleBilirubin('total')" placeholder="0.2-1.2"></td>
-                            <td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]" id="res_tbil"></td>
-                        </tr>
-                        <tr>
-                            <td class="item-header font-medium">Indirect bilirubin (mg/dL)</td>
-                            <td data-label="評估日期"><input type="date" class="auto-date"></td>
-                            <td data-label="評估紀錄"><input type="number" inputmode="decimal" id="in_ibil" oninput="handleBilirubin('indirect')" placeholder="0.2-1.0"></td>
-                            <td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]" id="res_ibil"></td>
-                        </tr>
-                        <tr>
-                            <td class="item-header font-medium">Direct bilirubin (mg/dL)</td>
-                            <td data-label="評估日期"><input type="date" class="auto-date"></td>
-                            <td data-label="評估紀錄"><input type="number" inputmode="decimal" id="in_dbil" oninput="handleBilirubin('direct')" placeholder="0-0.5"></td>
-                            <td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]" id="res_dbil"></td>
-                        </tr>
-                        <tr><td class="item-header font-medium">Schistocyte(%)</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'schisto')" id="in_schisto"><option value="">請選擇</option><option value="未檢測">未檢測</option><option value="Negative">Negative</option><option value="Postive">Postive</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
-                    </tbody>
-                </table>
+        <!-- ================= 大區塊 2：Exclusion Tests ================= -->
+        <div class="mb-8 border-2 border-[var(--theme-primary)] rounded-xl overflow-hidden shadow-sm bg-slate-50/50">
+            <div class="major-section-header bg-gradient-to-r from-[var(--theme-dark)] to-[var(--theme-primary)] text-white font-extrabold text-center py-3 text-sm md:text-base uppercase tracking-wider">
+                Exclusion tests Checklist (排除診斷)
             </div>
-        </div>
+            <div class="p-3 md:p-5 flex flex-col gap-4">
 
-        <!-- Part 4: Gene & Imaging -->
-        <div class="glass-card">
-            <div class="table-responsive">
-                <table>
-                    <colgroup><col width="30%"><col width="20%"><col width="25%"><col width="25%"></colgroup>
-                    <thead><tr class="sub-category"><td colspan="4">基因檢測 / Biopsy / Medical Imaging</td></tr></thead>
-                    <tbody>
-                        <tr><td class="item-header font-medium">aHUS相關基因</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'gene')"><option value="">請選擇</option><option value="未檢測">未檢測</option><option value="Negative">Negative</option><option value="Postive">Postive</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
-                        <script>
-                            const biopsyItems = [
-                                { n: "Renal biopsy", id: "in_renal_biopsy" },
-                                { n: "Other biopsy", id: "in_other_biopsy" },
-                                { n: "Brain CT or MRI", id: "in_brain_imaging" },
-                                { n: "Other CT or MRI", id: "in_other_imaging" }
-                            ];
-                            biopsyItems.forEach(x => {
-                                document.write(`<tr><td class="item-header font-medium">${x.n}</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select id="${x.id}" onchange="logicCheck(this, 'biopsy')"><option value="">請選擇</option><option value="未施行">未施行</option><option value="無異常">無異常</option><option value="Thrombosis">Thrombosis</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>`);
-                            });
-                            ["EKG", "Heart sonography"].forEach(x => {
-                                document.write(`<tr><td class="item-header font-medium">${x}</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'heart')"><option value="">請選擇</option><option value="未施行">未施行</option><option value="異常">異常</option><option value="正常">正常</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>`);
-                            });
-                        </script>
-                    </tbody>
-                </table>
-            </div>
-        </div>
+                <!-- 獨立卡片 6：ADAMTS13 檢測 -->
+                <div class="glass-card !mb-0">
+                    <div class="table-responsive">
+                        <table>
+                            <colgroup><col width="30%"><col width="20%"><col width="25%"><col width="25%"></colgroup>
+                            <tbody>
+                                <tr class="sub-category">
+                                    <td colspan="4">
+                                        <div class="flex items-center justify-between w-full">
+                                            <span>ADAMTS13 檢測</span>
+                                            <span id="prog-sec-adamts" class="prog-badge text-[10px] md:text-[11px] font-bold px-2 py-0.5 rounded shadow-sm border prog-incomplete">完成 0/0</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                            <tbody id="sec-adamts">
+                                <tr class="label-row"><td>評估項目</td><td>評估日期</td><td>紀錄</td><td>條件核對結果</td></tr>
+                                <tr><td class="item-header font-bold">ADAMTS13 (PE前)</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><input type="text" inputmode="decimal" oninput="logicCheck(this, 'adamts')" id="in_adamts" onblur="formatPercent(this)" placeholder="> 10%"></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
 
-        <!-- Part 5: Exclusion Tests -->
-        <div class="glass-card">
-            <div class="table-responsive">
-                <table>
-                    <colgroup><col width="30%"><col width="20%"><col width="25%"><col width="25%"></colgroup>
-                    <thead><tr class="header-main"><td colspan="4">Exclusion tests Checklist (排除診斷)</td></tr></thead>
-                    <tbody>
-                        <tr><td class="item-header font-bold">ADAMTS13 (PE前)</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><input type="text" inputmode="decimal" oninput="logicCheck(this, 'adamts')" id="in_adamts" onblur="formatPercent(this)" placeholder="> 10%"></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
+                <!-- 獨立卡片 7：PLASMIC SCORE -->
+                <div class="glass-card border-teal-200 !mb-0">
+                    <div class="table-responsive">
+                        <table class="plasmic-table">
+                            <colgroup><col width="60%"><col width="20%"><col width="20%"></colgroup>
+                            <tbody>
+                                <tr class="sub-category cursor-pointer select-none" onclick="toggleSection('sec-plasmic', 'icon-plasmic')">
+                                    <td colspan="3">
+                                        <div class="flex items-center justify-between py-1 px-1 w-full">
+                                            <div class="flex items-center gap-2">
+                                                <span class="text-[var(--theme-dark)] font-bold text-sm md:text-base">排除TTP - PLASMIC Score <span class="text-[10px] md:text-xs text-slate-500 font-medium ml-1 hidden md:inline-block">(等待ADAMTS-13結果前的初步評估)</span></span>
+                                                <a href="https://www.mdcalc.com/calc/10200/plasmic-score-ttp#pearls-pitfalls" target="_blank" onclick="event.stopPropagation()" class="no-print text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded border border-slate-300 font-bold hover:bg-slate-300 transition-colors hidden sm:inline-block">EBM</a>
+                                            </div>
+                                            <div class="flex items-center gap-1.5 md:gap-2 text-[var(--theme-primary)] toggle-badge">
+                                                <button type="button" onclick="event.stopPropagation(); resetPlasmic();" class="no-print px-3 py-1.5 bg-white text-[var(--theme-primary)] border border-teal-200 rounded text-[11px] font-bold hover:bg-teal-50 shadow-sm transition-all mr-1 md:mr-2">重新計分</button>
+                                                <span id="prog-sec-plasmic" class="prog-badge text-[10px] md:text-[11px] font-bold px-2 py-0.5 rounded shadow-sm border prog-incomplete">完成 0/0</span>
+                                                <span class="text-[10px] md:text-[11px] font-bold bg-teal-50 px-2 py-0.5 rounded border border-teal-200 shadow-sm hidden sm:inline-block">展開 / 縮小</span>
+                                                <svg id="icon-plasmic" class="w-5 h-5 transition-transform duration-300 toggle-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                            <tbody id="sec-plasmic" class="section-content hidden">
+                                <tr class="label-row"><td>評估細項</td><td>YES</td><td>NO</td></tr>
+                                <tr><td class="item-header font-medium text-slate-700">Platelet count &lt; 30 x 10⁹/L</td><td data-label="YES" class="text-center"><input type="radio" name="p0" value="1" onclick="calcPlasmic()" class="w-5 h-5 accent-[var(--theme-primary)]"></td><td data-label="NO" class="text-center"><input type="radio" name="p0" value="0" onclick="calcPlasmic()" class="w-5 h-5 accent-[var(--theme-primary)]"></td></tr>
+                                <tr><td class="item-header font-medium text-slate-700">Hemolysis (Retic &gt;2.5%, Hapto undetectable, iBil &gt;2.0)</td><td data-label="YES" class="text-center"><input type="radio" name="p1" value="1" onclick="calcPlasmic()" class="w-5 h-5 accent-[var(--theme-primary)]"></td><td data-label="NO" class="text-center"><input type="radio" name="p1" value="0" onclick="calcPlasmic()" class="w-5 h-5 accent-[var(--theme-primary)]"></td></tr>
+                                <tr><td class="item-header font-medium text-slate-700">Active cancer</td><td data-label="YES" class="text-center"><input type="radio" name="p2" value="0" onclick="calcPlasmic()" class="w-5 h-5 accent-[var(--theme-primary)]"></td><td data-label="NO" class="text-center"><input type="radio" name="p2" value="1" onclick="calcPlasmic()" class="w-5 h-5 accent-[var(--theme-primary)]"></td></tr>
+                                <tr><td class="item-header font-medium text-slate-700">History of solid-organ or stem-cell transplant</td><td data-label="YES" class="text-center"><input type="radio" name="p3" value="0" onclick="calcPlasmic()" class="w-5 h-5 accent-[var(--theme-primary)]"></td><td data-label="NO" class="text-center"><input type="radio" name="p3" value="1" onclick="calcPlasmic()" class="w-5 h-5 accent-[var(--theme-primary)]"></td></tr>
+                                <tr><td class="item-header font-medium text-slate-700">MCV &lt; 90 fL</td><td data-label="YES" class="text-center"><input type="radio" name="p4" value="1" onclick="calcPlasmic()" class="w-5 h-5 accent-[var(--theme-primary)]"></td><td data-label="NO" class="text-center"><input type="radio" name="p4" value="0" onclick="calcPlasmic()" class="w-5 h-5 accent-[var(--theme-primary)]"></td></tr>
+                                <tr><td class="item-header font-medium text-slate-700">INR &lt; 1.5</td><td data-label="YES" class="text-center"><input type="radio" name="p5" value="1" onclick="calcPlasmic()" class="w-5 h-5 accent-[var(--theme-primary)]"></td><td data-label="NO" class="text-center"><input type="radio" name="p5" value="0" onclick="calcPlasmic()" class="w-5 h-5 accent-[var(--theme-primary)]"></td></tr>
+                                <tr><td class="item-header font-medium text-slate-700">Creatinine &lt; 2.0 mg/dL</td><td data-label="YES" class="text-center"><input type="radio" name="p6" value="1" onclick="calcPlasmic()" class="w-5 h-5 accent-[var(--theme-primary)]"></td><td data-label="NO" class="text-center"><input type="radio" name="p6" value="0" onclick="calcPlasmic()" class="w-5 h-5 accent-[var(--theme-primary)]"></td></tr>
+                                <tr class="bg-slate-800 text-white font-bold score-row">
+                                    <td class="item-header bg-slate-800 text-white md:text-right tracking-wide pr-4 border-none !important">綜合評估結果</td>
+                                    <td colspan="2" class="text-center py-3">
+                                        <div id="p_score_val" class="text-lg mb-1">0 分</div>
+                                        <div id="p_risk_tag"></div>
+                                        <div id="p_final_res" class="text-[11px] mt-1 text-slate-300"></div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
 
-        <!-- PLASMIC SCORE -->
-        <div class="glass-card border-teal-200">
-            <div class="table-responsive">
-                <table class="plasmic-table">
-                    <colgroup><col width="60%"><col width="20%"><col width="20%"></colgroup>
-                    <thead>
-                        <tr class="sub-category">
-                            <td colspan="3">
-                                <div class="flex items-center justify-between py-1 px-1">
-                                    <div class="flex items-center gap-2">
-                                        <span class="text-[var(--theme-dark)] font-bold text-sm md:text-base">排除TTP - PLASMIC Score</span>
-                                        <a href="https://www.mdcalc.com/calc/10200/plasmic-score-ttp#pearls-pitfalls" target="_blank" class="no-print text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded border border-slate-300 font-bold hover:bg-slate-300 transition-colors">EBM</a>
-                                    </div>
-                                    <button type="button" onclick="resetPlasmic()" class="no-print px-3 py-1.5 bg-white text-[var(--theme-primary)] border border-teal-200 rounded text-[11px] font-bold hover:bg-teal-50 shadow-sm transition-all">重新計分</button>
-                                </div>
-                            </td>
-                        </tr>
-                        <tr class="label-row"><td>評估細項</td><td>YES</td><td>NO</td></tr>
-                    </thead>
-                    <tbody>
-                        <tr><td class="item-header font-medium text-slate-700">Platelet count &lt; 30 x 10⁹/L</td><td data-label="YES" class="text-center"><input type="radio" name="p0" value="1" onclick="calcPlasmic()" class="w-5 h-5 accent-[var(--theme-primary)]"></td><td data-label="NO" class="text-center"><input type="radio" name="p0" value="0" onclick="calcPlasmic()" class="w-5 h-5 accent-[var(--theme-primary)]"></td></tr>
-                        <tr><td class="item-header font-medium text-slate-700">Hemolysis (Retic &gt;2.5%, Hapto undetectable, iBil &gt;2.0)</td><td data-label="YES" class="text-center"><input type="radio" name="p1" value="1" onclick="calcPlasmic()" class="w-5 h-5 accent-[var(--theme-primary)]"></td><td data-label="NO" class="text-center"><input type="radio" name="p1" value="0" onclick="calcPlasmic()" class="w-5 h-5 accent-[var(--theme-primary)]"></td></tr>
-                        <tr><td class="item-header font-medium text-slate-700">Active cancer</td><td data-label="YES" class="text-center"><input type="radio" name="p2" value="0" onclick="calcPlasmic()" class="w-5 h-5 accent-[var(--theme-primary)]"></td><td data-label="NO" class="text-center"><input type="radio" name="p2" value="1" onclick="calcPlasmic()" class="w-5 h-5 accent-[var(--theme-primary)]"></td></tr>
-                        <tr><td class="item-header font-medium text-slate-700">History of solid-organ or stem-cell transplant</td><td data-label="YES" class="text-center"><input type="radio" name="p3" value="0" onclick="calcPlasmic()" class="w-5 h-5 accent-[var(--theme-primary)]"></td><td data-label="NO" class="text-center"><input type="radio" name="p3" value="1" onclick="calcPlasmic()" class="w-5 h-5 accent-[var(--theme-primary)]"></td></tr>
-                        <tr><td class="item-header font-medium text-slate-700">MCV &lt; 90 fL</td><td data-label="YES" class="text-center"><input type="radio" name="p4" value="1" onclick="calcPlasmic()" class="w-5 h-5 accent-[var(--theme-primary)]"></td><td data-label="NO" class="text-center"><input type="radio" name="p4" value="0" onclick="calcPlasmic()" class="w-5 h-5 accent-[var(--theme-primary)]"></td></tr>
-                        <tr><td class="item-header font-medium text-slate-700">INR &lt; 1.5</td><td data-label="YES" class="text-center"><input type="radio" name="p5" value="1" onclick="calcPlasmic()" class="w-5 h-5 accent-[var(--theme-primary)]"></td><td data-label="NO" class="text-center"><input type="radio" name="p5" value="0" onclick="calcPlasmic()" class="w-5 h-5 accent-[var(--theme-primary)]"></td></tr>
-                        <tr><td class="item-header font-medium text-slate-700">Creatinine &lt; 2.0 mg/dL</td><td data-label="YES" class="text-center"><input type="radio" name="p6" value="1" onclick="calcPlasmic()" class="w-5 h-5 accent-[var(--theme-primary)]"></td><td data-label="NO" class="text-center"><input type="radio" name="p6" value="0" onclick="calcPlasmic()" class="w-5 h-5 accent-[var(--theme-primary)]"></td></tr>
-                        <tr class="bg-slate-800 text-white font-bold score-row">
-                            <td class="item-header bg-slate-800 text-white md:text-right tracking-wide pr-4 border-none !important">綜合評估結果</td>
-                            <td colspan="2" class="text-center py-3">
-                                <div id="p_score_val" class="text-lg mb-1">0 分</div>
-                                <div id="p_risk_tag"></div>
-                                <div id="p_final_res" class="text-[11px] mt-1 text-slate-300"></div>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
+                <!-- 獨立卡片 8：排除 DIC -->
+                <div class="glass-card !mb-0">
+                    <div class="table-responsive">
+                        <table>
+                            <colgroup><col width="30%"><col width="20%"><col width="25%"><col width="25%"></colgroup>
+                            <tbody>
+                                <tr class="sub-category cursor-pointer select-none" onclick="toggleSection('sec-dic', 'icon-dic')">
+                                    <td colspan="4">
+                                        <div class="flex items-center justify-between w-full">
+                                            <span>排除 DIC</span>
+                                            <div class="flex items-center gap-1.5 md:gap-2 text-[var(--theme-primary)] toggle-badge">
+                                                <span id="prog-sec-dic" class="prog-badge text-[10px] md:text-[11px] font-bold px-2 py-0.5 rounded shadow-sm border prog-incomplete">完成 0/0</span>
+                                                <span class="text-[10px] md:text-[11px] font-bold bg-teal-50 px-2 py-0.5 rounded border border-teal-200 shadow-sm hidden sm:inline-block">展開 / 縮小</span>
+                                                <svg id="icon-dic" class="w-5 h-5 transition-transform duration-300 toggle-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                            <tbody id="sec-dic" class="section-content hidden">
+                                <tr class="label-row"><td>評估項目</td><td>評估日期</td><td>紀錄</td><td>條件核對結果</td></tr>
+                                <tr><td class="item-header font-medium">PT (sec)</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><input type="number" inputmode="decimal" oninput="logicCheck(this, 'pt')" id="in_dic_pt" placeholder="10-12"></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
+                                <tr><td class="item-header font-medium">aPTT (sec)</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><input type="number" inputmode="decimal" oninput="logicCheck(this, 'aptt')" id="in_dic_aptt" placeholder="25-32"></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
+                                <tr><td class="item-header font-medium">Fibrinogen (mg/dL)</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><input type="number" inputmode="decimal" oninput="logicCheck(this, 'fibrinogen')" id="in_dic_fib" placeholder="170-420"></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
+                                <tr><td class="item-header font-medium">FDP (μg/mL)</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><input type="number" inputmode="decimal" oninput="logicCheck(this, 'fdp')" id="in_dic_fdp" placeholder="< 5"></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
+                                <tr><td class="item-header font-medium">D-dimer (mg/L FEU)</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><input type="number" inputmode="decimal" oninput="logicCheck(this, 'ddimer')" id="in_dic_dimer" placeholder="< 0.55"></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- 獨立卡片 9：排除 Antiphospholipid syndrome -->
+                <div class="glass-card !mb-0">
+                    <div class="table-responsive">
+                        <table>
+                            <colgroup><col width="30%"><col width="20%"><col width="25%"><col width="25%"></colgroup>
+                            <tbody>
+                                <tr class="sub-category cursor-pointer select-none" onclick="toggleSection('sec-aps', 'icon-aps')">
+                                    <td colspan="4">
+                                        <div class="flex items-center justify-between w-full">
+                                            <span>排除 Antiphospholipid syndrome</span>
+                                            <div class="flex items-center gap-1.5 md:gap-2 text-[var(--theme-primary)] toggle-badge">
+                                                <span id="prog-sec-aps" class="prog-badge text-[10px] md:text-[11px] font-bold px-2 py-0.5 rounded shadow-sm border prog-incomplete">完成 0/0</span>
+                                                <span class="text-[10px] md:text-[11px] font-bold bg-teal-50 px-2 py-0.5 rounded border border-teal-200 shadow-sm hidden sm:inline-block">展開 / 縮小</span>
+                                                <svg id="icon-aps" class="w-5 h-5 transition-transform duration-300 toggle-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                            <tbody id="sec-aps" class="section-content hidden">
+                                <tr class="label-row"><td>評估項目</td><td>評估日期</td><td>紀錄</td><td>條件核對結果</td></tr>
+                                <tr><td class="item-header font-medium">Lupus Anticoagulant (LA)</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'infection')" id="in_aps_la"><option value="">請選擇</option><option value="未檢測">未檢測</option><option value="Negative">Negative</option><option value="Postive">Postive</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
+                                <tr><td class="item-header font-medium">Anti-Cardiolipin Antibodies(ACA)</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'aca')" id="in_aps_aca"><option value="">請選擇</option><option value="未檢測">未檢測</option><option value="Negative">Negative</option><option value="Postive">Postive</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
+                                <tr><td class="item-header font-medium">Anti-β2-Glycoprotein I(Aβ2GPI)</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'ab2gpi')" id="in_aps_ab2"><option value="">請選擇</option><option value="未檢測">未檢測</option><option value="Negative">Negative</option><option value="Postive">Postive</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- 獨立卡片 10：排除 Infection -->
+                <div class="glass-card !mb-0">
+                    <div class="table-responsive">
+                        <table>
+                            <colgroup><col width="30%"><col width="20%"><col width="25%"><col width="25%"></colgroup>
+                            <tbody>
+                                <tr class="sub-category cursor-pointer select-none" onclick="toggleSection('sec-inf', 'icon-inf')">
+                                    <td colspan="4">
+                                        <div class="flex items-center justify-between w-full">
+                                            <span>排除 Infection</span>
+                                            <div class="flex items-center gap-1.5 md:gap-2 text-[var(--theme-primary)] toggle-badge">
+                                                <span id="prog-sec-inf" class="prog-badge text-[10px] md:text-[11px] font-bold px-2 py-0.5 rounded shadow-sm border prog-incomplete">完成 0/0</span>
+                                                <span class="text-[10px] md:text-[11px] font-bold bg-teal-50 px-2 py-0.5 rounded border border-teal-200 shadow-sm hidden sm:inline-block">展開 / 縮小</span>
+                                                <svg id="icon-inf" class="w-5 h-5 transition-transform duration-300 toggle-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                            <tbody id="sec-inf" class="section-content hidden">
+                                <tr class="label-row"><td>評估項目</td><td>評估日期</td><td>紀錄</td><td>條件核對結果</td></tr>
+                                <script>
+                                    const infList = ["E.coli:O157", "Shiga toxin", "S. Pneumoniae", "Influenza"];
+                                    infList.forEach((x, i) => {
+                                        document.write(`<tr><td class="item-header font-medium">${x}</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'infection')" id="in_inf_${i}"><option value="">請選擇</option><option value="未檢測">未檢測</option><option value="Negative">Negative</option><option value="Postive">Postive</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>`);
+                                    });
+                                </script>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- 獨立卡片 11：排除 Cobalamin C -->
+                <div class="glass-card !mb-0">
+                    <div class="table-responsive">
+                        <table>
+                            <colgroup><col width="30%"><col width="20%"><col width="25%"><col width="25%"></colgroup>
+                            <tbody>
+                                <tr class="sub-category cursor-pointer select-none" onclick="toggleSection('sec-cob', 'icon-cob')">
+                                    <td colspan="4">
+                                        <div class="flex items-center justify-between w-full">
+                                            <span>排除 Cobalamin C (至少一項)</span>
+                                            <div class="flex items-center gap-1.5 md:gap-2 text-[var(--theme-primary)] toggle-badge">
+                                                <span id="prog-sec-cob" class="prog-badge text-[10px] md:text-[11px] font-bold px-2 py-0.5 rounded shadow-sm border prog-incomplete">完成 0/0</span>
+                                                <span class="text-[10px] md:text-[11px] font-bold bg-teal-50 px-2 py-0.5 rounded border border-teal-200 shadow-sm hidden sm:inline-block">展開 / 縮小</span>
+                                                <svg id="icon-cob" class="w-5 h-5 transition-transform duration-300 toggle-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                            <tbody id="sec-cob" class="section-content hidden">
+                                <tr class="label-row"><td>評估項目</td><td>評估日期</td><td>紀錄</td><td>條件核對結果</td></tr>
+                                <script>
+                                    const cobList = ["Vitamin B12", "Homocysteine", "Methylmalonic acid", "串聯質譜儀檢測"];
+                                    cobList.forEach((x, i) => {
+                                        document.write(`<tr><td class="item-header font-medium">${x}</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'cobalamin')" id="in_cob_${i}"><option value="">請選擇</option><option value="未檢測">未檢測</option><option value="High">High</option><option value="Normal Range">Normal Range</option><option value="Deficient/Low">Deficient/Low</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>`);
+                                    });
+                                </script>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- 獨立卡片 12：排除 Drug & 其他因素 -->
+                <div class="glass-card !mb-0">
+                    <div class="table-responsive">
+                        <table>
+                            <colgroup><col width="30%"><col width="20%"><col width="25%"><col width="25%"></colgroup>
+                            <tbody>
+                                <tr class="sub-category cursor-pointer select-none" onclick="toggleSection('sec-drug', 'icon-drug')">
+                                    <td colspan="4">
+                                        <div class="flex items-center justify-between w-full">
+                                            <span>排除 Drug & 其他因素</span>
+                                            <div class="flex items-center gap-1.5 md:gap-2 text-[var(--theme-primary)] toggle-badge">
+                                                <span id="prog-sec-drug" class="prog-badge text-[10px] md:text-[11px] font-bold px-2 py-0.5 rounded shadow-sm border prog-incomplete">完成 0/0</span>
+                                                <span class="text-[10px] md:text-[11px] font-bold bg-teal-50 px-2 py-0.5 rounded border border-teal-200 shadow-sm hidden sm:inline-block">展開 / 縮小</span>
+                                                <svg id="icon-drug" class="w-5 h-5 transition-transform duration-300 toggle-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                            <tbody id="sec-drug" class="section-content hidden">
+                                <tr class="label-row"><td>評估項目</td><td>評估日期</td><td>紀錄</td><td>條件核對結果</td></tr>
+                                <script>
+                                    const drugList = ["Calcineurin inhibitors", "Chemotherapy", "Platelet inhibitor", "Oral contraceptive", "Malignant HTN", "HELLP"];
+                                    drugList.forEach((x, i) => {
+                                        document.write(`<tr><td class="item-header font-medium">${x}</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'drug')" id="in_drug_${i}"><option value="">請選擇</option><option value="排除">排除</option><option value="無法排除">無法排除</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>`);
+                                    });
+                                </script>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
 
-        <!-- DIC, Infection, Cobalamin, Drugs -->
-        <div class="glass-card">
-            <div class="table-responsive">
-                <table>
-                    <colgroup><col width="30%"><col width="20%"><col width="25%"><col width="25%"></colgroup>
-                    <thead><tr class="sub-category"><td colspan="4">排除 DIC</td></tr></thead>
-                    <tbody>
-                        <tr><td class="item-header font-medium">PT (sec)</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><input type="number" inputmode="decimal" oninput="logicCheck(this, 'pt')" id="in_dic_pt" placeholder="10-12"></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
-                        <tr><td class="item-header font-medium">aPTT (sec)</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><input type="number" inputmode="decimal" oninput="logicCheck(this, 'aptt')" id="in_dic_aptt" placeholder="25-32"></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
-                        <tr><td class="item-header font-medium">Fibrinogen (mg/dL)</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><input type="number" inputmode="decimal" oninput="logicCheck(this, 'fibrinogen')" id="in_dic_fib" placeholder="170-420"></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
-                        <tr><td class="item-header font-medium">FDP (μg/mL)</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><input type="number" inputmode="decimal" oninput="logicCheck(this, 'fdp')" id="in_dic_fdp" placeholder="< 5"></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
-                        <tr><td class="item-header font-medium">D-dimer (mg/L FEU)</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><input type="number" inputmode="decimal" oninput="logicCheck(this, 'ddimer')" id="in_dic_dimer" placeholder="< 0.55"></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
-                    </tbody>
-                    <thead><tr class="sub-category"><td colspan="4">排除 Antiphospholipid syndrome</td></tr></thead>
-                    <tbody>
-                        <tr><td class="item-header font-medium">Lupus Anticoagulant (LA)</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'infection')" id="in_aps_la"><option value="">請選擇</option><option value="未檢測">未檢測</option><option value="Negative">Negative</option><option value="Postive">Postive</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
-                        <tr><td class="item-header font-medium">Anti-Cardiolipin Antibodies(ACA)</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'aca')" id="in_aps_aca"><option value="">請選擇</option><option value="未檢測">未檢測</option><option value="Negative">Negative</option><option value="Postive">Postive</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
-                        <tr><td class="item-header font-medium">Anti-β2-Glycoprotein I(Aβ2GPI)</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'ab2gpi')" id="in_aps_ab2"><option value="">請選擇</option><option value="未檢測">未檢測</option><option value="Negative">Negative</option><option value="Postive">Postive</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
-                    </tbody>
-                    <thead><tr class="sub-category"><td colspan="4">排除 Infection</td></tr></thead>
-                    <tbody>
-                        <script>
-                            const infList = ["E.coli:O157", "Shiga toxin", "S. Pneumoniae", "Influenza"];
-                            infList.forEach((x, i) => {
-                                document.write(`<tr><td class="item-header font-medium">${x}</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'infection')" id="in_inf_${i}"><option value="">請選擇</option><option value="未檢測">未檢測</option><option value="Negative">Negative</option><option value="Postive">Postive</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>`);
-                            });
-                        </script>
-                    </tbody>
-                    <thead><tr class="sub-category"><td colspan="4">排除 Cobalamin C (至少一項)</td></tr></thead>
-                    <tbody>
-                        <script>
-                            const cobList = ["Vitamin B12", "Homocysteine", "Methylmalonic acid", "串聯質譜儀檢測"];
-                            cobList.forEach((x, i) => {
-                                document.write(`<tr><td class="item-header font-medium">${x}</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'cobalamin')" id="in_cob_${i}"><option value="">請選擇</option><option value="未檢測">未檢測</option><option value="High">High</option><option value="Normal Range">Normal Range</option><option value="Deficient/Low">Deficient/Low</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>`);
-                            });
-                        </script>
-                    </tbody>
-                    <thead><tr class="sub-category"><td colspan="4">排除 Drug & 其他因素</td></tr></thead>
-                    <tbody>
-                        <script>
-                            const drugList = ["Calcineurin inhibitors", "Chemotherapy", "Platelet inhibitor", "Oral contraceptive", "Malignant HTN", "HELLP"];
-                            drugList.forEach((x, i) => {
-                                document.write(`<tr><td class="item-header font-medium">${x}</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><select onchange="logicCheck(this, 'drug')" id="in_drug_${i}"><option value="">請選擇</option><option value="排除">排除</option><option value="無法排除">無法排除</option></select></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>`);
-                            });
-                        </script>
-                    </tbody>
-                </table>
             </div>
         </div>
 
         <!-- Section: Charts -->
-        <section class="mt-8 md:mt-10 no-print">
-            <h2 class="text-lg md:text-xl font-bold text-slate-800 mb-4 md:mb-6 flex items-center gap-2">
-                <svg class="w-5 h-5 text-[var(--theme-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path></svg>
-                各項檢測值趨勢視覺化分析
-            </h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div class="chart-card"><h3 class="chart-title text-teal-700">Hb 趨勢</h3><div class="h-40 md:h-48 w-full"><canvas id="chart-hb"></canvas></div></div>
-                <div class="chart-card">
-                    <div class="flex justify-between items-center mb-3"><h3 class="chart-title text-red-600 mb-0">Platelet 趨勢</h3><div id="plt-alert-tag" class="platelet-alert flex gap-1 items-center"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span><span>降幅 > 25%</span></div></div>
-                    <div class="h-40 md:h-48 w-full"><canvas id="chart-plt"></canvas></div>
+        <section class="mt-8 md:mt-10 mb-8 border-2 border-[var(--theme-primary)] rounded-xl overflow-hidden shadow-sm bg-slate-50/50 no-print">
+            <div class="major-section-header bg-gradient-to-r from-[var(--theme-dark)] to-[var(--theme-primary)] text-white cursor-pointer select-none py-3 px-4 relative" onclick="toggleSection('sec-charts-general', 'icon-charts-general')">
+                <div class="font-extrabold text-center text-sm md:text-base uppercase tracking-wider flex justify-center items-center gap-2">
+                    <svg class="w-5 h-5 text-white/90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path></svg>
+                    各項檢測值趨勢視覺化分析
                 </div>
-                <div class="chart-card"><h3 class="chart-title text-emerald-600">Retic 趨勢</h3><div class="h-40 md:h-48 w-full"><canvas id="chart-retic"></canvas></div></div>
-                <div class="chart-card"><h3 class="chart-title text-amber-600">sCr 趨勢</h3><div class="h-40 md:h-48 w-full"><canvas id="chart-scr"></canvas></div></div>
-                <div class="chart-card"><h3 class="chart-title text-[var(--theme-dark)]">LDH 趨勢</h3><div class="h-40 md:h-48 w-full"><canvas id="chart-ldh"></canvas></div></div>
-                <div class="chart-card"><h3 class="chart-title text-pink-600">Hapto 趨勢</h3><div class="h-40 md:h-48 w-full"><canvas id="chart-hap"></canvas></div></div>
-                <div class="chart-card">
-                    <h3 class="chart-title text-slate-600">血壓 趨勢 (收縮/舒張)</h3>
-                    <div class="h-40 md:h-48 w-full"><canvas id="chart-bp"></canvas></div>
+                <div class="absolute right-3 top-1/2 transform -translate-y-1/2 flex items-center gap-1.5 md:gap-2 text-white toggle-badge">
+                    <span class="text-[10px] md:text-[11px] font-bold bg-white/20 px-2 py-0.5 rounded border border-white/30 shadow-sm hidden sm:inline-block">展開 / 縮小</span>
+                    <svg id="icon-charts-general" class="w-5 h-5 transition-transform duration-300 toggle-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
                 </div>
             </div>
-            <div class="text-center mt-6 mb-10">
-                <button type="button" onclick="updateCharts()" class="px-8 py-3 bg-[var(--theme-primary)] text-white rounded-xl font-bold shadow-md hover:shadow-lg hover:bg-[#1d6b65] transition-all transform hover:-translate-y-0.5 active:translate-y-0">更新趨勢圖</button>
+            
+            <div id="sec-charts-general" class="section-content hidden p-3 md:p-5">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="chart-card !mb-0"><h3 class="chart-title text-teal-700">Hb 趨勢</h3><div class="h-40 md:h-48 w-full"><canvas id="chart-hb"></canvas></div></div>
+                    <div class="chart-card !mb-0">
+                        <div class="flex justify-between items-center mb-3"><h3 class="chart-title text-red-600 mb-0">Platelet 趨勢</h3><div id="plt-alert-tag" class="platelet-alert flex gap-1 items-center"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span><span>降幅 > 25%</span></div></div>
+                        <div class="h-40 md:h-48 w-full"><canvas id="chart-plt"></canvas></div>
+                    </div>
+                    <div class="chart-card !mb-0"><h3 class="chart-title text-emerald-600">Retic 趨勢</h3><div class="h-40 md:h-48 w-full"><canvas id="chart-retic"></canvas></div></div>
+                    <div class="chart-card !mb-0"><h3 class="chart-title text-amber-600">sCr 趨勢</h3><div class="h-40 md:h-48 w-full"><canvas id="chart-scr"></canvas></div></div>
+                    <div class="chart-card !mb-0"><h3 class="chart-title text-[var(--theme-dark)]">LDH 趨勢</h3><div class="h-40 md:h-48 w-full"><canvas id="chart-ldh"></canvas></div></div>
+                    <div class="chart-card !mb-0"><h3 class="chart-title text-pink-600">Hapto 趨勢</h3><div class="h-40 md:h-48 w-full"><canvas id="chart-hap"></canvas></div></div>
+                    <div class="chart-card !mb-0">
+                        <h3 class="chart-title text-slate-600">血壓 趨勢 (收縮/舒張)</h3>
+                        <div class="h-40 md:h-48 w-full"><canvas id="chart-bp"></canvas></div>
+                    </div>
+                </div>
             </div>
         </section>
 
-        <div class="text-center text-xs font-medium text-slate-400 mt-4 mb-6">
+        <!-- 新增：PE/PT 治療綜合分析專區 -->
+        <section class="mb-8 border-2 border-[var(--theme-primary)] rounded-xl overflow-hidden shadow-sm bg-slate-50/50 no-print" id="ptpe-analysis-section">
+            <div class="major-section-header bg-gradient-to-r from-[var(--theme-dark)] to-[var(--theme-primary)] text-white cursor-pointer select-none py-3 px-4 relative" onclick="toggleSection('sec-charts-ptpe', 'icon-charts-ptpe')">
+                <div class="font-extrabold text-center text-sm md:text-base uppercase tracking-wider flex justify-center items-center gap-2">
+                    <svg class="w-5 h-5 text-amber-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                    PE/PT 治療期間核心指標綜合分析
+                </div>
+                <div class="absolute right-3 top-1/2 transform -translate-y-1/2 flex items-center gap-1.5 md:gap-2 text-white toggle-badge">
+                    <span class="text-[10px] md:text-[11px] font-bold bg-white/20 px-2 py-0.5 rounded border border-white/30 shadow-sm hidden sm:inline-block">展開 / 縮小</span>
+                    <svg id="icon-charts-ptpe" class="w-5 h-5 transition-transform duration-300 toggle-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+                </div>
+            </div>
+            
+            <div id="sec-charts-ptpe" class="section-content hidden p-3 md:p-5">
+                <div class="relative glass-card p-4 md:p-5 border border-amber-200 !mb-0">
+                    <!-- 空狀態防呆遮罩 -->
+                    <div id="ptpe-empty-state" class="absolute inset-0 z-10 bg-slate-50/95 backdrop-blur-sm flex flex-col items-center justify-center rounded-xl">
+                        <svg class="w-12 h-12 text-slate-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        <span class="text-slate-500 font-bold text-sm md:text-base">未執行 PE/PT 治療無法分析</span>
+                        <span class="text-slate-400 font-medium text-xs mt-1">請在治療紀錄區塊輸入數值後自動解鎖</span>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 gap-6">
+                        <div class="chart-card !mb-0">
+                            <div class="flex justify-between items-center mb-3">
+                                <h3 class="chart-title text-teal-700 mb-0">Hb 治療趨勢</h3>
+                                <div id="ptpe-alert-hb" class="platelet-alert flex gap-1 items-center bg-red-50 text-red-600 border-red-200"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span><span>未從PE/PT中獲得顯著改善</span></div>
+                            </div>
+                            <div class="h-56 md:h-64 w-full"><canvas id="chart-ptpe-hb"></canvas></div>
+                        </div>
+                        <div class="chart-card !mb-0">
+                            <div class="flex justify-between items-center mb-3">
+                                <h3 class="chart-title text-red-600 mb-0">Platelet 治療趨勢</h3>
+                                <div id="ptpe-alert-plt" class="platelet-alert flex gap-1 items-center bg-red-50 text-red-600 border-red-200"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span><span>未從PE/PT中獲得顯著改善</span></div>
+                            </div>
+                            <div class="h-56 md:h-64 w-full"><canvas id="chart-ptpe-plt"></canvas></div>
+                        </div>
+                        <div class="chart-card !mb-0">
+                            <div class="flex justify-between items-center mb-3">
+                                <h3 class="chart-title text-amber-600 mb-0">sCr 治療趨勢</h3>
+                                <div id="ptpe-alert-scr" class="platelet-alert flex gap-1 items-center bg-red-50 text-red-600 border-red-200"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span><span>未從PE/PT中獲得顯著改善</span></div>
+                            </div>
+                            <div class="h-56 md:h-64 w-full"><canvas id="chart-ptpe-scr"></canvas></div>
+                        </div>
+                        <div class="chart-card !mb-0">
+                            <div class="flex justify-between items-center mb-3">
+                                <h3 class="chart-title text-[var(--theme-dark)] mb-0">LDH 治療趨勢</h3>
+                                <div id="ptpe-alert-ldh" class="platelet-alert flex gap-1 items-center bg-red-50 text-red-600 border-red-200"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span><span>未從PE/PT中獲得顯著改善</span></div>
+                            </div>
+                            <div class="h-56 md:h-64 w-full"><canvas id="chart-ptpe-ldh"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="text-center text-xs font-medium text-slate-400 mt-6 mb-6">
             本系統相關審查條件與檢核邏輯最後更新日為 2026年04月29日
         </div>
     </form>
@@ -634,17 +990,425 @@
 <script>
     let charts = {};
 
+    // 新增：客製化 Alert 提示框
+    function showCustomAlert(msg, isSuccess = false) {
+        const alertDiv = document.createElement('div');
+        const bgColor = isSuccess ? 'bg-emerald-600' : 'bg-red-600';
+        const icon = isSuccess ? 
+            `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>` : 
+            `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>`;
+            
+        alertDiv.className = `fixed top-6 left-1/2 transform -translate-x-1/2 z-[9999] ${bgColor} text-white px-6 py-3 rounded-xl shadow-2xl font-bold flex items-center gap-2 animate-slide-alert`;
+        alertDiv.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">${icon}</svg> <span>${msg}</span>`;
+        document.body.appendChild(alertDiv);
+        setTimeout(() => alertDiv.remove(), 4000);
+    }
+
+    // 新增：區塊進度計算與防呆高亮邏輯
+    function updateProgressUI() {
+        const sections = [
+            { id: 'sec-treatment', headerId: 'prog-sec-treatment' },
+            { id: 'sec-clinical', headerId: 'prog-sec-clinical' },
+            { id: 'sec-monitoring', headerId: 'prog-sec-monitoring' },
+            { id: 'sec-other-lab', headerId: 'prog-sec-other-lab' },
+            { id: 'sec-gene', headerId: 'prog-sec-gene' },
+            { id: 'sec-adamts', headerId: 'prog-sec-adamts' },
+            { id: 'sec-plasmic', headerId: 'prog-sec-plasmic' },
+            { id: 'sec-dic', headerId: 'prog-sec-dic' },
+            { id: 'sec-aps', headerId: 'prog-sec-aps' },
+            { id: 'sec-inf', headerId: 'prog-sec-inf' },
+            { id: 'sec-cob', headerId: 'prog-sec-cob' },
+            { id: 'sec-drug', headerId: 'prog-sec-drug' }
+        ];
+
+        sections.forEach(sec => {
+            const tbody = document.getElementById(sec.id);
+            const badge = document.getElementById(sec.headerId);
+            if (!tbody || !badge) return;
+
+            let total = 0;
+            let filled = 0;
+
+            if (sec.id === 'sec-treatment') {
+                // 客製化邏輯：PE/PT 視為同一項目 (完成其一即皆完成)，加上 HD 共 2 項
+                total = 2;
+                const pt = document.getElementById('in_pt_count');
+                const pe = document.getElementById('in_pe_count');
+                const hd = document.getElementById('in_hd_count');
+                
+                const ptFilled = pt && pt.value.trim() !== '';
+                const peFilled = pe && pe.value.trim() !== '';
+                const hdFilled = hd && hd.value !== '' && hd.value !== '請選擇';
+
+                if (ptFilled || peFilled) {
+                    filled++;
+                    if(pt) pt.classList.remove('unfilled-highlight');
+                    if(pe) pe.classList.remove('unfilled-highlight');
+                } else {
+                    if(pt) pt.classList.add('unfilled-highlight');
+                    if(pe) pe.classList.add('unfilled-highlight');
+                }
+
+                if (hdFilled) {
+                    filled++;
+                    if(hd) hd.classList.remove('unfilled-highlight');
+                } else {
+                    if(hd) hd.classList.add('unfilled-highlight');
+                }
+
+            } else if (sec.id === 'sec-cob') {
+                // 客製化邏輯：Cobalamin C 只要有任一項填寫，即算 1/1 完成
+                total = 1;
+                const cobInputs = Array.from(tbody.querySelectorAll('select'));
+                const anyFilled = cobInputs.some(el => el.value !== '' && el.value !== '請選擇');
+                
+                if (anyFilled) {
+                    filled = 1;
+                    cobInputs.forEach(el => el.classList.remove('unfilled-highlight'));
+                } else {
+                    cobInputs.forEach(el => el.classList.add('unfilled-highlight'));
+                }
+
+            } else if (sec.id === 'sec-monitoring') {
+                // 客製化邏輯：連續監測只計算第一筆原始資料(共8個欄位)，後續動態新增的欄位不計入比例
+                const allVisibleInputs = Array.from(tbody.querySelectorAll('td[data-label="評估紀錄"] input:not([type="hidden"])')).filter(el => {
+                    const tr = el.closest('tr');
+                    return tr && tr.style.display !== 'none';
+                });
+
+                allVisibleInputs.forEach(el => {
+                    const tr = el.closest('tr');
+                    const isRow0 = tr && tr.id && tr.id.endsWith('-0');
+                    const isFilled = el.value.trim() !== '';
+                    
+                    if (isRow0) {
+                        total++;
+                        if (isFilled) filled++;
+                    }
+                    
+                    // 動態新增的欄位即便不計入比例，仍保持直覺的漏填反黃防呆機制
+                    if (isFilled) {
+                        el.classList.remove('unfilled-highlight');
+                    } else {
+                        el.classList.add('unfilled-highlight');
+                    }
+                });
+
+            } else {
+                // 預設邏輯：針對其他所有一般區塊
+                const inputs = Array.from(tbody.querySelectorAll('td[data-label="評估紀錄"] input:not([type="hidden"]), td[data-label="評估紀錄"] select'));
+                const radios = Array.from(tbody.querySelectorAll('input[type="radio"]'));
+                
+                // 過濾掉隱藏或未展開的列
+                const visibleInputs = inputs.filter(el => {
+                    const tr = el.closest('tr');
+                    return tr && tr.style.display !== 'none';
+                });
+
+                // 計算輸入框與選單
+                visibleInputs.forEach(el => {
+                    total++;
+                    let isFilled = false;
+                    if (el.tagName === 'SELECT') {
+                        isFilled = el.value !== '' && el.value !== '請選擇';
+                    } else {
+                        isFilled = el.value.trim() !== '';
+                    }
+
+                    if (isFilled) {
+                        filled++;
+                        el.classList.remove('unfilled-highlight');
+                    } else {
+                        el.classList.add('unfilled-highlight');
+                    }
+                });
+
+                // 計算 PLASMIC Score 單選按鈕 (依 Group 計數)
+                if (radios.length > 0) {
+                    const groups = {};
+                    radios.forEach(r => {
+                        if (!groups[r.name]) groups[r.name] = [];
+                        groups[r.name].push(r);
+                    });
+                    
+                    Object.keys(groups).forEach(name => {
+                        total++;
+                        const group = groups[name];
+                        const isChecked = group.some(r => r.checked);
+                        if (isChecked) {
+                            filled++;
+                            group.forEach(r => r.closest('td').classList.remove('unfilled-highlight'));
+                        } else {
+                            group.forEach(r => r.closest('td').classList.add('unfilled-highlight'));
+                        }
+                    });
+                }
+            }
+
+            // 更新 Badge 狀態
+            badge.innerText = `完成 ${filled}/${total}`;
+            if (filled === total && total > 0) {
+                badge.classList.remove('prog-incomplete');
+                badge.classList.add('prog-complete');
+            } else {
+                badge.classList.remove('prog-complete');
+                badge.classList.add('prog-incomplete');
+            }
+        });
+    }
+
+    // 新增：從 Excel 還原資料功能
+    function importFromExcel(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const htmlText = e.target.result;
+            
+            // 驗證是否為本系統匯出之檔案
+            if (!htmlText.includes('aHUS疑似個案Inclusion tests Checklist') || !htmlText.includes('urn:schemas-microsoft-com:office:excel')) {
+                showCustomAlert('上傳之Excel格式不符');
+                event.target.value = '';
+                return;
+            }
+
+            const parser = new DOMParser();
+            const importedDoc = parser.parseFromString(htmlText, 'text/html');
+
+            // 1. 預先處理 PT / PE 次數，觸發動態欄位生成，確保架構與匯入檔一致
+            const headers = Array.from(importedDoc.querySelectorAll('td.item-header'));
+            
+            const ptHeader = headers.find(td => td.innerText.includes('Plasma Transfusion'));
+            if (ptHeader) {
+                const span = ptHeader.parentElement.querySelector('td[data-label="評估紀錄"] span:not(.text-slate-300)');
+                if (span) {
+                    const val = span.innerText.trim();
+                    const input = document.getElementById('in_pt_count');
+                    if (val && !isNaN(val)) { 
+                        input.value = val; 
+                        input.dispatchEvent(new Event('input', {bubbles:true}));
+                        generateTreatmentDates(input, 'pt'); 
+                    }
+                }
+            }
+
+            const peHeader = headers.find(td => td.innerText.includes('Plasma Exchange'));
+            if (peHeader) {
+                const span = peHeader.parentElement.querySelector('td[data-label="評估紀錄"] span:not(.text-slate-300)');
+                if (span) {
+                    const val = span.innerText.trim();
+                    const input = document.getElementById('in_pe_count');
+                    if (val && !isNaN(val)) { 
+                        input.value = val; 
+                        input.dispatchEvent(new Event('input', {bubbles:true}));
+                        generateTreatmentDates(input, 'pe'); 
+                    }
+                }
+            }
+
+            // 2. 還原基本患者資訊
+            const ptDivs = importedDoc.querySelectorAll('.grid-cols-2 > div');
+            if (ptDivs.length >= 4) {
+                document.getElementById('form_date').value = ptDivs[0].querySelector('span')?.innerText.trim() || '';
+                const docInput = document.querySelector('.grid-cols-2 > div:nth-child(2) input');
+                if(docInput) docInput.value = ptDivs[1].querySelector('span')?.innerText.trim() || '';
+                const ageInput = document.querySelector('.grid-cols-2 > div:nth-child(3) input');
+                if(ageInput) ageInput.value = ptDivs[2].querySelector('span')?.innerText.trim() || '';
+                const genderText = ptDivs[3].querySelector('span')?.innerText.trim();
+                const genderSelect = document.querySelector('.grid-cols-2 > div:nth-child(4) select');
+                if(genderSelect && genderText) {
+                    Array.from(genderSelect.options).forEach(opt => { if(opt.text === genderText) genderSelect.value = opt.value; });
+                }
+            }
+
+            // 3. 還原表格輸入欄位與選擇核取
+            const liveRows = document.querySelectorAll('#checklistForm tbody tr');
+            const importedRows = Array.from(importedDoc.querySelectorAll('tbody tr'));
+            
+            let ptIndex = 0;
+            let peIndex = 0;
+
+            liveRows.forEach(liveTr => {
+                let impTr = null;
+                if (liveTr.id) {
+                    impTr = importedDoc.getElementById(liveTr.id);
+                } else if (liveTr.classList.contains('dynamic-row-pt')) {
+                    const impPts = importedDoc.querySelectorAll('.dynamic-row-pt');
+                    if (impPts[ptIndex]) impTr = impPts[ptIndex++];
+                } else if (liveTr.classList.contains('dynamic-row-pe')) {
+                    const impPes = importedDoc.querySelectorAll('.dynamic-row-pe');
+                    if (impPes[peIndex]) impTr = impPes[peIndex++];
+                } else {
+                    const liveHeader = liveTr.querySelector('td.item-header');
+                    if (liveHeader) {
+                        const hText = liveHeader.innerText.trim();
+                        impTr = importedRows.find(tr => {
+                            const h = tr.querySelector('td.item-header');
+                            return h && h.innerText.trim() === hText;
+                        });
+                    }
+                }
+
+                if (impTr) {
+                    // 填入日期
+                    const liveDate = liveTr.querySelector('td[data-label="評估日期"] input');
+                    const impDate = impTr.querySelector('td[data-label="評估日期"] span:not(.text-slate-300)');
+                    if (liveDate && impDate) {
+                        const dVal = impDate.innerText.trim();
+                        if(dVal) liveDate.value = dVal;
+                    }
+
+                    // 填入紀錄數值或選項
+                    const liveRecords = liveTr.querySelectorAll('td[data-label="評估紀錄"] input, td[data-label="評估紀錄"] select');
+                    const impRecords = impTr.querySelectorAll('td[data-label="評估紀錄"] span:not(.text-slate-300)');
+                    for (let i = 0; i < liveRecords.length; i++) {
+                        if (impRecords[i]) {
+                            const text = impRecords[i].innerText.trim();
+                            if (text) {
+                                if (liveRecords[i].tagName === 'SELECT') {
+                                    Array.from(liveRecords[i].options).forEach(opt => { if(opt.text === text) liveRecords[i].value = opt.value; });
+                                } else {
+                                    liveRecords[i].value = text;
+                                }
+                                liveRecords[i].dispatchEvent(new Event('input', { bubbles: true }));
+                                liveRecords[i].dispatchEvent(new Event('change', { bubbles: true }));
+                            }
+                        }
+                    }
+
+                    // 填入 PLASMIC Score 單選框
+                    ['YES', 'NO'].forEach(label => {
+                        const liveRadio = liveTr.querySelector(`td[data-label="${label}"] input[type="radio"]`);
+                        const impSpan = impTr.querySelector(`td[data-label="${label}"] span`);
+                        if (liveRadio && impSpan && impSpan.innerText.trim() === '☑') {
+                            liveRadio.checked = true;
+                        }
+                    });
+                }
+            });
+
+            // 4. 重算總結邏輯與還原監測展開狀態
+            if (typeof handleBilirubin === 'function') handleBilirubin('total');
+            updatePlasmicAuto();
+            calcPlasmic();
+            calculateNHICompliance();
+            updateCharts();
+            
+            if (window.trendItems) {
+                window.trendItems.forEach(t => {
+                    let maxIndex = 0;
+                    for (let i = 0; i < 5; i++) {
+                        const row = document.getElementById(`tr-${t.c}-${i}`);
+                        if (row) {
+                            const inputs = Array.from(row.querySelectorAll('td[data-label="評估紀錄"] input'));
+                            if (inputs.some(inp => inp.value !== '')) maxIndex = i;
+                        }
+                    }
+                    if (maxIndex > 0) {
+                        const rsCell = document.getElementById(`td-rs-${t.c}`);
+                        if (rsCell) rsCell.rowSpan = maxIndex + 1;
+                        for (let i = 0; i <= maxIndex; i++) {
+                            const row = document.getElementById(`tr-${t.c}-${i}`);
+                            if (row) row.style.display = '';
+                        }
+                    }
+                });
+            }
+
+            updateProgressUI();
+            showCustomAlert('匯入成功，已自動還原資料與分析結果！', true);
+            event.target.value = ''; // 清除 input，以允許重複選取相同檔案
+        };
+        reader.readAsText(file);
+    }
+
+    // 專門繪製 PE/PT 黃色背景區間的外掛插件
+    const treatmentPeriodPlugin = {
+        id: 'treatmentPeriodPlugin',
+        beforeDraw(chart) {
+            if (!chart.config.data.treatmentIndices) return;
+            const { ctx, chartArea: { top, bottom, left, right }, scales: { x } } = chart;
+            let { startIdx, endIdx } = chart.config.data.treatmentIndices;
+            
+            if (startIdx === -1 || endIdx === -1 || startIdx > endIdx) return;
+
+            let startX = x.getPixelForTick(startIdx);
+            let endX = x.getPixelForTick(endIdx);
+            
+            // 讓單一治療點也能有適當的寬度以顯示黃色高亮
+            if (startX === endX) {
+                startX -= 30;
+                endX += 30;
+            } else {
+                startX -= 10;
+                endX += 10;
+            }
+
+            // 確保塗色不超出圖表區域
+            if (startX < left) startX = left;
+            if (endX > right) endX = right;
+
+            ctx.save();
+            ctx.fillStyle = 'rgba(253, 224, 71, 0.25)'; // Tailwind yellow-300 with transparency
+            ctx.fillRect(startX, top, endX - startX, bottom - top);
+            
+            ctx.fillStyle = 'rgba(217, 119, 6, 0.9)'; // Tailwind amber-600
+            ctx.font = 'bold 11px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            
+            // 防止文字超出左右邊界
+            let textX = startX + (endX - startX) / 2;
+            if (textX < left + 35) textX = left + 35;
+            if (textX > right - 35) textX = right - 35;
+            
+            ctx.fillText('PE/PT治療期間', textX, top + 6);
+            ctx.restore();
+        }
+    };
+
+    // ==========================================
+    // 展開 / 收合區塊邏輯
+    // ==========================================
+    function toggleSection(sectionId, iconId) {
+        const sec = document.getElementById(sectionId);
+        const icon = document.getElementById(iconId);
+        if (sec.classList.contains('hidden')) {
+            sec.classList.remove('hidden');
+            if(icon) icon.style.transform = 'rotate(180deg)';
+        } else {
+            sec.classList.add('hidden');
+            if(icon) icon.style.transform = 'rotate(0deg)';
+        }
+    }
+
+    // 切換 FAB 按鈕的載入狀態
+    function setFabLoading(isLoading, btnId) {
+        const btn = document.getElementById(btnId);
+        if (!btn) return;
+        const mainIcon = btn.querySelector('.main-icon');
+        const loadingIcon = btn.querySelector('.loading-icon');
+        const allBtns = document.querySelectorAll('.fab-btn');
+        
+        if (isLoading) {
+            mainIcon.classList.add('hidden');
+            loadingIcon.classList.remove('hidden');
+            allBtns.forEach(b => { b.style.pointerEvents = 'none'; if(b.id !== btnId) b.style.opacity = '0.5'; });
+        } else {
+            mainIcon.classList.remove('hidden');
+            loadingIcon.classList.add('hidden');
+            allBtns.forEach(b => { b.style.pointerEvents = ''; b.style.opacity = '1'; });
+        }
+    }
+
+    // 匯出為圖檔功能
     function exportToImage() {
         const element = document.getElementById('mainContent');
         window.scrollTo(0, 0);
-        
-        // 為了確保所有圖檔皆匯出為專業的桌機A4排版模式 (防止被手機版面切斷或影響醫學報告正式性)
-        // 強制注入 1024 像素的視窗寬度，這會觸發 html2canvas 採用桌機版 CSS Media Query
         const targetWidth = 1024;
-
-        const fab = document.querySelector('.fab-main');
-        const originalHtml = fab.innerHTML;
-        fab.innerHTML = '<svg class="animate-spin w-6 h-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+        
+        setFabLoading(true, 'btnImage');
 
         html2canvas(element, {
             scale: 2, 
@@ -654,10 +1418,47 @@
             width: targetWidth,
             windowWidth: targetWidth, 
             onclone: (clonedDoc) => {
+                const clonedSections = clonedDoc.querySelectorAll('.section-content');
+                clonedSections.forEach(sec => sec.classList.remove('hidden'));
+                
+                const toggleBadges = clonedDoc.querySelectorAll('.toggle-badge');
+                toggleBadges.forEach(badge => badge.style.display = 'none');
+
+                // 移除 UI 防呆用的進度標籤與黃色底色，讓畫面保持專業
+                clonedDoc.querySelectorAll('.prog-badge').forEach(badge => badge.remove());
+                clonedDoc.querySelectorAll('.unfilled-highlight').forEach(el => el.classList.remove('unfilled-highlight'));
+
                 const clonedElement = clonedDoc.getElementById('mainContent');
                 clonedElement.style.width = targetWidth + 'px';
                 clonedElement.style.maxWidth = 'none';
                 clonedElement.style.padding = '20px 40px'; 
+
+                // --- 解決文字截斷優化：將輸入框替換為靜態 div 以確保完美渲染 ---
+                const inputs = clonedDoc.querySelectorAll('input:not([type="radio"]):not([type="checkbox"]), select');
+                inputs.forEach(input => {
+                    const div = clonedDoc.createElement('div');
+                    let val = input.value;
+                    if (input.tagName === 'SELECT') {
+                        val = input.options[input.selectedIndex]?.text || '';
+                        if (val === '請選擇') val = '';
+                    }
+                    div.innerText = val || ' '; // 空值塞入空白以撐開高度
+                    // 賦予與輸入框相同的 CSS 樣式，並設定垂直置中
+                    div.style.cssText = `
+                        width: 100%; border: 1.5px solid #cbd5e1; border-radius: 6px;
+                        padding: 10px 8px; font-size: 14px; background-color: #fff;
+                        box-sizing: border-box; min-height: 44px; display: flex;
+                        align-items: center; color: #1e293b; word-break: break-word;
+                        line-height: 1.4;
+                    `;
+                    input.parentNode.replaceChild(div, input);
+                });
+                
+                // 額外增加表格儲存格的上下內距，防止其他文字貼邊
+                const fixStyle = clonedDoc.createElement('style');
+                fixStyle.innerHTML = `td { padding-top: 14px !important; padding-bottom: 14px !important; }`;
+                clonedDoc.head.appendChild(fixStyle);
+                // -----------------------------------------------------------------
             }
         }).then(canvas => {
             try {
@@ -667,16 +1468,191 @@
                     link.style.display = 'none'; link.href = url;
                     link.download = `aHUS_Assessment_${new Date().toISOString().slice(0,10)}.png`;
                     document.body.appendChild(link); link.click();
-                    setTimeout(() => { document.body.removeChild(link); window.URL.revokeObjectURL(url); fab.innerHTML = originalHtml; }, 100);
+                    setTimeout(() => { document.body.removeChild(link); window.URL.revokeObjectURL(url); setFabLoading(false, 'btnImage'); }, 100);
                 }, 'image/png', 1.0);
             } catch (e) {
                 const imgData = canvas.toDataURL('image/png');
                 const link = document.createElement('a');
                 link.href = imgData; link.download = `aHUS_Assessment_${new Date().toISOString().slice(0,10)}.png`;
                 document.body.appendChild(link); link.click(); document.body.removeChild(link);
-                fab.innerHTML = originalHtml;
+                setFabLoading(false, 'btnImage');
             }
         });
+    }
+
+    // 匯出為 PDF 檔案功能
+    function exportToPDF() {
+        const { jsPDF } = window.jspdf;
+        const element = document.getElementById('mainContent');
+        window.scrollTo(0, 0);
+        const targetWidth = 1024;
+        
+        setFabLoading(true, 'btnPdf');
+
+        html2canvas(element, {
+            scale: 2, 
+            useCORS: true, 
+            logging: false, 
+            backgroundColor: '#f1f5f9',
+            width: targetWidth,
+            windowWidth: targetWidth, 
+            onclone: (clonedDoc) => {
+                const clonedSections = clonedDoc.querySelectorAll('.section-content');
+                clonedSections.forEach(sec => sec.classList.remove('hidden'));
+
+                const toggleBadges = clonedDoc.querySelectorAll('.toggle-badge');
+                toggleBadges.forEach(badge => badge.style.display = 'none');
+
+                // 移除 UI 防呆用的進度標籤與黃色底色，讓畫面保持專業
+                clonedDoc.querySelectorAll('.prog-badge').forEach(badge => badge.remove());
+                clonedDoc.querySelectorAll('.unfilled-highlight').forEach(el => el.classList.remove('unfilled-highlight'));
+
+                const clonedElement = clonedDoc.getElementById('mainContent');
+                clonedElement.style.width = targetWidth + 'px';
+                clonedElement.style.maxWidth = 'none';
+                clonedElement.style.padding = '20px 40px'; 
+
+                // --- 解決文字截斷優化：將輸入框替換為靜態 div 以確保完美渲染 ---
+                const inputs = clonedDoc.querySelectorAll('input:not([type="radio"]):not([type="checkbox"]), select');
+                inputs.forEach(input => {
+                    const div = clonedDoc.createElement('div');
+                    let val = input.value;
+                    if (input.tagName === 'SELECT') {
+                        val = input.options[input.selectedIndex]?.text || '';
+                        if (val === '請選擇') val = '';
+                    }
+                    div.innerText = val || ' '; // 空值塞入空白以撐開高度
+                    // 賦予與輸入框相同的 CSS 樣式，並設定垂直置中
+                    div.style.cssText = `
+                        width: 100%; border: 1.5px solid #cbd5e1; border-radius: 6px;
+                        padding: 10px 8px; font-size: 14px; background-color: #fff;
+                        box-sizing: border-box; min-height: 44px; display: flex;
+                        align-items: center; color: #1e293b; word-break: break-word;
+                        line-height: 1.4;
+                    `;
+                    input.parentNode.replaceChild(div, input);
+                });
+                
+                // 額外增加表格儲存格的上下內距，防止其他文字貼邊
+                const fixStyle = clonedDoc.createElement('style');
+                fixStyle.innerHTML = `td { padding-top: 14px !important; padding-bottom: 14px !important; }`;
+                clonedDoc.head.appendChild(fixStyle);
+                // -----------------------------------------------------------------
+            }
+        }).then(canvas => {
+            const imgData = canvas.toDataURL('image/png');
+            
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            
+            const imgWidth = canvas.width;
+            const imgHeight = canvas.height;
+            const ratio = imgWidth / pdfWidth;
+            const scaledHeight = imgHeight / ratio;
+            
+            let heightLeft = scaledHeight;
+            let position = 0;
+            
+            pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, scaledHeight);
+            heightLeft -= pdfHeight;
+            
+            while (heightLeft > 0) {
+                position = heightLeft - scaledHeight;
+                pdf.addPage();
+                pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, scaledHeight);
+                heightLeft -= pdfHeight;
+            }
+            
+            pdf.save(`aHUS_Assessment_${new Date().toISOString().slice(0,10)}.pdf`);
+            setFabLoading(false, 'btnPdf');
+        }).catch(() => { setFabLoading(false, 'btnPdf'); });
+    }
+
+    // 匯出為 Excel 檔案功能
+    function exportToExcel() {
+        setFabLoading(true, 'btnExcel');
+        setTimeout(() => {
+            const originalTable = document.getElementById('checklistForm').cloneNode(true);
+            const inputs = document.getElementById('checklistForm').querySelectorAll('input, select');
+            const clonedInputs = originalTable.querySelectorAll('input, select');
+            
+            inputs.forEach((input, i) => {
+                if (!clonedInputs[i]) return;
+                let val = '';
+                if (input.tagName === 'SELECT') {
+                    val = input.options[input.selectedIndex]?.text || '';
+                    if (val === '請選擇') val = '';
+                } else if (input.type === 'radio' || input.type === 'checkbox') {
+                    val = input.checked ? '☑' : '☐';
+                } else {
+                    val = input.value;
+                }
+                const span = document.createElement('span');
+                span.innerText = val;
+                clonedInputs[i].parentNode.replaceChild(span, clonedInputs[i]);
+            });
+
+            // 1. 強制展開所有隱藏的區域
+            originalTable.querySelectorAll('.section-content').forEach(sec => sec.classList.remove('hidden'));
+            
+            // 2. 強制顯示所有被隱藏的資料列 (如連續監測未輸入的列)，避免 Excel 判定為無效結構
+            originalTable.querySelectorAll('tr').forEach(tr => {
+                if (tr.style.display === 'none') tr.style.display = '';
+            });
+
+            // 3. 移除不必要的 UI 與會嚴重破壞 Excel 解析的元素
+            originalTable.querySelectorAll('.toggle-badge, .prog-badge, .no-print, canvas, svg, button, script').forEach(el => el.remove());
+
+            // 4. 將 Tailwind 顏色狀態轉換為 Inline Style，確保 Excel 能夠正確渲染核對結果的顏色
+            originalTable.querySelectorAll('.result-cell').forEach(cell => {
+                if (cell.classList.contains('text-success')) cell.style.color = '#10b981';
+                else if (cell.classList.contains('text-alert')) cell.style.color = '#ef4444';
+                else if (cell.classList.contains('text-warning')) cell.style.color = '#f59e0b';
+                else cell.style.color = '#64748b';
+            });
+            
+            // 確保特殊標題列在 Excel 也能顯示正確的深色背景與白字
+            originalTable.querySelectorAll('.bg-slate-800').forEach(el => {
+                el.style.backgroundColor = '#1e293b';
+                el.style.color = '#ffffff';
+            });
+
+            const html = `
+                <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+                <head>
+                    <meta charset="utf-8">
+                    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+                    <style>
+                        table { border-collapse: collapse; width: 100%; font-family: 'Microsoft JhengHei', sans-serif; margin-bottom: 15px; }
+                        th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; vertical-align: middle; font-size: 14px;}
+                        .major-section-header { background-color: #268c85; color: #ffffff; font-weight: bold; text-align: center; font-size: 16px; padding: 12px; margin-bottom: 10px; }
+                        .header-main { background-color: #268c85; color: #ffffff; font-weight: bold; text-align: center; }
+                        .sub-category { background-color: #f8fafc; color: #268c85; font-weight: bold; }
+                        .label-row { background-color: #f8fafc; color: #64748b; font-weight: bold; text-align: center; }
+                        .item-header { background-color: #f8fafc; font-weight: bold; color: #58595b; }
+                        .result-cell { font-weight: bold; text-align: right; }
+                        h1, h3 { color: #1e293b; }
+                    </style>
+                </head>
+                <body>
+                    ${originalTable.innerHTML}
+                </body>
+                </html>
+            `;
+            
+            // 加上 \uFEFF (BOM) 確保 Excel 直接開啟時不會產生中文亂碼
+            const blob = new Blob(['\uFEFF' + html], { type: 'application/vnd.ms-excel;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `aHUS_Assessment_${new Date().toISOString().slice(0,10)}.xls`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            setFabLoading(false, 'btnExcel');
+        }, 300);
     }
 
     function resetEntireForm() {
@@ -685,9 +1661,79 @@
         resetPlasmic();
         const today = new Date().toISOString().split('T')[0];
         document.querySelectorAll('.auto-date').forEach(i => i.value = today);
+        
+        document.querySelectorAll('.dynamic-row-pt, .dynamic-row-pe').forEach(row => row.remove());
+
+        document.querySelectorAll('.section-content').forEach(sec => sec.classList.add('hidden'));
+        document.querySelectorAll('.toggle-icon').forEach(icon => icon.style.transform = 'rotate(0deg)');
+
+        if (window.trendItems) {
+            window.trendItems.forEach(t => {
+                for(let i=1; i<5; i++) {
+                    const row = document.getElementById(`tr-${t.c}-${i}`);
+                    if(row) row.style.display = 'none';
+                }
+                const rsCell = document.getElementById(`td-rs-${t.c}`);
+                if(rsCell) rsCell.rowSpan = 1;
+            });
+        }
+
         updateCharts();
         calculateNHICompliance();
+        updateProgressUI(); // 同步重置計數器與防呆樣式
         window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function generateTreatmentDates(inputEl, type) {
+        const oldRows = document.querySelectorAll(`.dynamic-row-${type}`);
+        oldRows.forEach(row => row.remove());
+
+        let count = parseInt(inputEl.value);
+        if (isNaN(count) || count <= 0) {
+            updateCharts(); 
+            return;
+        }
+        if (count > 21) count = 21; 
+
+        let currentRow = inputEl.closest('tr');
+        const today = new Date().toISOString().split('T')[0];
+        const titleName = type === 'pt' ? 'PT' : 'PE';
+
+        for (let i = 1; i <= count; i++) {
+            const newRow = document.createElement('tr');
+            newRow.className = `dynamic-row-${type}`; 
+            
+            newRow.innerHTML = `
+                <td class="item-header md:pl-8 text-slate-500 text-xs md:text-sm border-l-2 border-teal-200 bg-slate-50/50">↳ ${titleName} 明細 (${i})</td>
+                <td data-label="評估日期" class="bg-slate-50/50"><input type="date" class="auto-date" value="${today}" onchange="updateCharts()"></td>
+                <td data-label="評估紀錄" class="bg-slate-50/50 flex items-center md:table-cell font-medium text-slate-600 justify-end md:text-left">第 ${i} 次治療</td>
+                <td data-label="核對結果" class="result-cell bg-slate-50/50"></td>
+            `;
+            
+            currentRow.parentNode.insertBefore(newRow, currentRow.nextSibling);
+            currentRow = newRow; 
+        }
+        updateCharts(); 
+    }
+
+    function checkReveal(category, index) {
+        if (index < 4) {
+            const nextIndex = index + 1;
+            const nextRow = document.getElementById(`tr-${category}-${nextIndex}`);
+            if (nextRow && nextRow.style.display === 'none') {
+                nextRow.style.display = ''; 
+                const rsCell = document.getElementById(`td-rs-${category}`);
+                if (rsCell) {
+                    rsCell.rowSpan = nextIndex + 1; 
+                }
+                const today = new Date().toISOString().split('T')[0];
+                const dateInput = nextRow.querySelector(`input[type="date"]`);
+                if (dateInput && !dateInput.value) {
+                    dateInput.value = today;
+                }
+            }
+            updateProgressUI(); // 顯示新欄位後同步更新計數器
+        }
     }
 
     const plateletAlertPlugin = {
@@ -757,9 +1803,23 @@
             case 'treatment':
                 text = (num >= 4) ? "符合申請條件" : "需解釋低於4次原因";
                 style = (num >= 4) ? "text-success" : "text-alert"; break;
-            case 'organ': case 'system':
+            case 'organ':
                 text = (val === "無異常") ? "無異常" : "有利證據";
                 style = (val === "無異常") ? "text-neutral" : "text-success"; break;
+            case 'system':
+                if (el.id === 'in_renal_sys') {
+                    if (val === "AKI第二期" || val === "AKI第三期") {
+                        text = "有利證據"; style = "text-success";
+                    } else if (val === "AKI第一期") {
+                        text = "未達標準"; style = "text-neutral";
+                    } else {
+                        text = "無異常"; style = "text-neutral";
+                    }
+                } else {
+                    text = (val === "無異常") ? "無異常" : "有利證據";
+                    style = (val === "無異常") ? "text-neutral" : "text-success"; 
+                }
+                break;
             case 'sd':
                 text = "依標準差判斷"; style = "text-warning"; break;
             case 'plt':
@@ -897,12 +1957,19 @@
     function updateCharts() {
         const fields = ['hb','plt','retic','scr','ldh','hap','bp'];
         fields.forEach(f => {
+            // 自動抓取該項目的檢驗日期作為時間軸 (取 MM-DD 格式避免太擠)
+            const dateInputs = document.querySelectorAll(`.date-${f}`);
+            const labels = Array.from(dateInputs).map((input, index) => {
+                return input.value ? input.value.substring(5) : `T${index + 1}`;
+            });
+
             if(f === 'bp') {
                 const sysInputs = document.querySelectorAll(`.track-bp-sys`);
                 const diaInputs = document.querySelectorAll(`.track-bp-dia`);
                 const sysData = Array.from(sysInputs).map(i => parseFloat(i.value) || null);
                 const diaData = Array.from(diaInputs).map(i => parseFloat(i.value) || null);
                 if(charts.bp) {
+                    charts.bp.data.labels = labels; // 連動 X 軸時間
                     charts.bp.data.datasets[0].data = sysData;
                     charts.bp.data.datasets[1].data = diaData;
                     charts.bp.update();
@@ -914,13 +1981,116 @@
                 const v = parseFloat(i.value.replace('%','').replace(/,/g, ''));
                 return isNaN(v) ? null : v;
             });
-            if(charts[f]) { charts[f].data.datasets[0].data = data; charts[f].update(); }
+            if(charts[f]) { 
+                charts[f].data.labels = labels; // 連動 X 軸時間
+                charts[f].data.datasets[0].data = data; 
+                charts[f].update(); 
+            }
             if(f === 'plt') {
                 let hasAlert = false; const v = data.filter(x => x !== null);
                 if(v.length >= 2) { for(let i=0; i<v.length; i++) for(let j=i+1; j<v.length; j++) if(v[i] > 0 && (v[i]-v[j])/v[i] > 0.25) hasAlert = true; }
                 document.getElementById('plt-alert-tag').style.display = hasAlert ? 'flex' : 'none';
             }
         });
+        
+        // 同步更新 PE/PT 專屬趨勢分析
+        updatePTPECharts();
+    }
+
+    // 更新 PE/PT 專屬綜合分析圖表的計算邏輯
+    function updatePTPECharts() {
+        const ptDates = Array.from(document.querySelectorAll('.dynamic-row-pt .auto-date')).map(el => el.value).filter(v => v);
+        const peDates = Array.from(document.querySelectorAll('.dynamic-row-pe .auto-date')).map(el => el.value).filter(v => v);
+        let treatmentDates = [...ptDates, ...peDates].filter(d => d);
+        
+        const emptyState = document.getElementById('ptpe-empty-state');
+        if (treatmentDates.length === 0) {
+            if(emptyState) emptyState.style.display = 'flex';
+            // 清空資料確保不殘留
+            ['ptpe_hb', 'ptpe_plt', 'ptpe_scr', 'ptpe_ldh'].forEach(id => {
+                if(charts[id]) {
+                    charts[id].data.labels = [];
+                    charts[id].data.datasets[0].data = [];
+                    charts[id].data.treatmentIndices = null;
+                    charts[id].update();
+                }
+                const alertEl = document.getElementById('ptpe-alert-' + id.split('_')[1]);
+                if(alertEl) alertEl.style.display = 'none';
+            });
+            return;
+        } else {
+            if(emptyState) emptyState.style.display = 'none';
+        }
+
+        const trSorted = treatmentDates.sort();
+        const firstTrDate = trSorted[0];
+        const lastTrDate = trSorted[trSorted.length - 1];
+
+        const processChart = (field, chartId) => {
+            const dates = Array.from(document.querySelectorAll(`.date-${field}`)).map(el => el.value);
+            const values = Array.from(document.querySelectorAll(`.track-${field}`)).map(el => {
+                const v = parseFloat(el.value.replace('%','').replace(/,/g, ''));
+                return isNaN(v) ? null : v;
+            });
+            const labData = dates.map((d, i) => ({ date: d, val: values[i] })).filter(x => x.date && x.val !== null);
+            
+            // 獨立時間軸: 只包含治療日期 + 該項目的檢驗日期
+            let chartDatesSet = new Set([...treatmentDates, ...labData.map(x=>x.date)]);
+            chartDatesSet.delete("");
+            let chartSortedDates = Array.from(chartDatesSet).sort();
+
+            const sIdx = chartSortedDates.indexOf(firstTrDate);
+            const eIdx = chartSortedDates.indexOf(lastTrDate);
+
+            const dataMapped = chartSortedDates.map(sd => {
+                const found = labData.find(d => d.date === sd);
+                return found ? found.val : null;
+            });
+
+            if (charts[chartId]) {
+                charts[chartId].data.labels = chartSortedDates;
+                charts[chartId].data.datasets[0].data = dataMapped;
+                charts[chartId].data.treatmentIndices = { startIdx: sIdx, endIdx: eIdx };
+                charts[chartId].update();
+            }
+
+            // 判斷是否低於/高於治療前數值
+            const alertEl = document.getElementById(`ptpe-alert-${field}`);
+            if (alertEl) {
+                let preVal = null;
+                let postVal = null;
+                
+                // 找出治療前(含第一天)的最後一筆數值
+                const preData = labData.filter(d => d.date <= firstTrDate).sort((a,b) => a.date.localeCompare(b.date));
+                if (preData.length > 0) preVal = preData[preData.length - 1].val;
+                
+                // 找出治療後(含最後一天)的最新一筆數值
+                const postData = labData.filter(d => d.date >= lastTrDate).sort((a,b) => a.date.localeCompare(b.date));
+                if (postData.length > 0) postVal = postData[postData.length - 1].val;
+
+                let shouldAlert = false;
+                if (preVal !== null && postVal !== null) {
+                    if (field === 'scr' || field === 'ldh') {
+                        // sCr與LDH數值升高或持平代表未改善
+                        shouldAlert = postVal >= preVal;
+                    } else {
+                        // Hb與Plt數值下降或持平代表未改善
+                        shouldAlert = postVal <= preVal;
+                    }
+                }
+
+                if (shouldAlert) {
+                    alertEl.style.display = 'flex';
+                } else {
+                    alertEl.style.display = 'none';
+                }
+            }
+        };
+
+        processChart('hb', 'ptpe_hb');
+        processChart('plt', 'ptpe_plt');
+        processChart('scr', 'ptpe_scr');
+        processChart('ldh', 'ptpe_ldh');
     }
 
     function calculateNHICompliance() {
@@ -1060,13 +2230,12 @@
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
         });
         
-        // 圖表顏色同樣依照中榮 Logo 顏色設定進行配適
-        charts.hb = new Chart(document.getElementById('chart-hb'), cfg('Hb', '#268c85')); // Teal 主色
+        charts.hb = new Chart(document.getElementById('chart-hb'), cfg('Hb', '#268c85')); 
         const pltCfg = cfg('Plt', '#ef4444'); pltCfg.plugins = [plateletAlertPlugin];
         charts.plt = new Chart(document.getElementById('chart-plt'), pltCfg);
         charts.retic = new Chart(document.getElementById('chart-retic'), cfg('Retic', '#10b981'));
         charts.scr = new Chart(document.getElementById('chart-scr'), cfg('sCr', '#f59e0b'));
-        charts.ldh = new Chart(document.getElementById('chart-ldh'), cfg('LDH', '#58595b')); // Dark Grey 深灰
+        charts.ldh = new Chart(document.getElementById('chart-ldh'), cfg('LDH', '#58595b')); 
         charts.hap = new Chart(document.getElementById('chart-hap'), cfg('Hap', '#ec4899'));
         charts.bp = new Chart(document.getElementById('chart-bp'), {
             type: 'line',
@@ -1082,6 +2251,22 @@
                 plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } } } 
             }
         });
+
+        // 初始化 PE/PT 專用的四個圖表
+        const ptpeCfg = (l, c) => ({ 
+            type: 'line', 
+            data: { 
+                labels: [], 
+                datasets: [{ label: l, borderColor: c, backgroundColor: c + '15', data: [], fill: false, tension: 0.1, spanGaps: true }] 
+            }, 
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } },
+            plugins: [treatmentPeriodPlugin]
+        });
+
+        charts.ptpe_hb = new Chart(document.getElementById('chart-ptpe-hb'), ptpeCfg('Hb', '#268c85'));
+        charts.ptpe_plt = new Chart(document.getElementById('chart-ptpe-plt'), ptpeCfg('Plt', '#ef4444'));
+        charts.ptpe_scr = new Chart(document.getElementById('chart-ptpe-scr'), ptpeCfg('sCr', '#f59e0b'));
+        charts.ptpe_ldh = new Chart(document.getElementById('chart-ptpe-ldh'), ptpeCfg('LDH', '#58595b'));
     }
 
     function formatPercent(i) { let v = i.value.replace(/%/g, '').trim(); if (v !== "" && !isNaN(v)) i.value = v + "%"; calculateNHICompliance(); }
@@ -1089,7 +2274,14 @@
     window.onload = function() {
         const today = new Date().toISOString().split('T')[0];
         document.querySelectorAll('.auto-date').forEach(i => i.value = today);
-        initCharts(); calculateNHICompliance();
+        initCharts(); 
+        calculateNHICompliance();
+        updatePTPECharts(); // 初始化時檢測一次 PE/PT 分析區域空狀態
+        updateProgressUI(); // 初始化進度計數與樣式
+
+        // 新增：監聽表單的即時變動，觸發計數器與防呆樣式更新
+        document.getElementById('checklistForm').addEventListener('input', updateProgressUI);
+        document.getElementById('checklistForm').addEventListener('change', updateProgressUI);
     };
 </script>
 
