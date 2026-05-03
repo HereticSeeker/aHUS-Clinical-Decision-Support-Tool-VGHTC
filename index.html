@@ -333,15 +333,15 @@
                 </div>
                 <div class="flex items-center gap-3">
                     <label class="w-20 md:w-24 font-bold text-slate-700 text-sm flex-shrink-0">填表醫師</label>
-                    <input type="text" class="flex-1" placeholder="輸入醫師姓名">
+                    <input type="text" class="flex-1" id="form_doc" placeholder="輸入醫師姓名">
                 </div>
                 <div class="flex items-center gap-3">
                     <label class="w-20 md:w-24 font-bold text-slate-700 text-sm flex-shrink-0">患者年齡</label>
-                    <input type="number" inputmode="decimal" class="flex-1" placeholder="輸入年齡">
+                    <input type="number" inputmode="decimal" class="flex-1" id="form_age" placeholder="輸入年齡">
                 </div>
                 <div class="flex items-center gap-3">
                     <label class="w-20 md:w-24 font-bold text-slate-700 text-sm flex-shrink-0">患者性別</label>
-                    <select class="flex-1">
+                    <select class="flex-1" id="form_gender">
                         <option value="">請選擇</option>
                         <option value="男">男 (Male)</option>
                         <option value="女">女 (Female)</option>
@@ -1210,18 +1210,33 @@
                 }
             }
 
-            // 2. 還原基本患者資訊
-            const ptDivs = importedDoc.querySelectorAll('.grid-cols-2 > div');
-            if (ptDivs.length >= 4) {
-                document.getElementById('form_date').value = ptDivs[0].querySelector('span')?.innerText.trim() || '';
-                const docInput = document.querySelector('.grid-cols-2 > div:nth-child(2) input');
-                if(docInput) docInput.value = ptDivs[1].querySelector('span')?.innerText.trim() || '';
-                const ageInput = document.querySelector('.grid-cols-2 > div:nth-child(3) input');
-                if(ageInput) ageInput.value = ptDivs[2].querySelector('span')?.innerText.trim() || '';
-                const genderText = ptDivs[3].querySelector('span')?.innerText.trim();
-                const genderSelect = document.querySelector('.grid-cols-2 > div:nth-child(4) select');
-                if(genderSelect && genderText) {
-                    Array.from(genderSelect.options).forEach(opt => { if(opt.text === genderText) genderSelect.value = opt.value; });
+            // 2. 還原基本患者資訊 (透過 Label 標題精準配對抓取對應的數值)
+            const impLabels = Array.from(importedDoc.querySelectorAll('label'));
+            const getBasicVal = (labelText) => {
+                const lbl = impLabels.find(l => l.innerText.includes(labelText));
+                if (lbl && lbl.parentElement) {
+                    const span = lbl.parentElement.querySelector('span');
+                    if (span) return span.innerText.trim();
+                }
+                return '';
+            };
+
+            const formDateVal = getBasicVal('填表日期');
+            if (formDateVal) document.getElementById('form_date').value = formDateVal;
+
+            const formDocVal = getBasicVal('填表醫師');
+            if (formDocVal) document.getElementById('form_doc').value = formDocVal;
+
+            const formAgeVal = getBasicVal('患者年齡');
+            if (formAgeVal) document.getElementById('form_age').value = formAgeVal;
+
+            const formGenderVal = getBasicVal('患者性別');
+            if (formGenderVal) {
+                const genderSelect = document.getElementById('form_gender');
+                if (genderSelect) {
+                    Array.from(genderSelect.options).forEach(opt => { 
+                        if(opt.text === formGenderVal) genderSelect.value = opt.value; 
+                    });
                 }
             }
 
