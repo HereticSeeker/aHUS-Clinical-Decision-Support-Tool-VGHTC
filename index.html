@@ -506,8 +506,11 @@
                                 <tr class="sub-category cursor-pointer select-none" onclick="toggleSection('sec-monitoring', 'icon-monitoring')">
                                     <td colspan="4">
                                         <div class="flex items-center justify-between w-full">
-                                            <span>連續監測重要指標(至多5次,建議日期由遠至近完整填寫)</span>
-                                            <div class="flex items-center gap-1.5 md:gap-2 text-[var(--theme-primary)] toggle-badge">
+                                            <div class="text-left leading-tight pr-2">
+                                                <span class="block md:inline">連續監測重要指標</span>
+                                                <span class="block md:inline text-[10px] md:text-[13px] font-normal md:ml-1 mt-0.5 md:mt-0">(至多5次,建議日期由遠至近完整填寫)</span>
+                                            </div>
+                                            <div class="flex items-center gap-1.5 md:gap-2 text-[var(--theme-primary)] toggle-badge flex-shrink-0">
                                                 <span id="prog-sec-monitoring" class="prog-badge text-[10px] md:text-[11px] font-bold px-2 py-0.5 rounded shadow-sm border prog-incomplete">完成 0/0</span>
                                                 <span class="text-[10px] md:text-[11px] font-bold bg-teal-50 px-2 py-0.5 rounded border border-teal-200 shadow-sm hidden sm:inline-block">展開 / 縮小</span>
                                                 <svg id="icon-monitoring" class="w-5 h-5 transition-transform duration-300 toggle-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
