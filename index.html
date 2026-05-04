@@ -13,7 +13,7 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
         :root {
-            /* 依據臺中榮民總醫院 Logo 提取之品牌色系 */
+            /* 依據臺中榮民總醫院 Logo 提取之品牌色系 (已改為通用專業版) */
             --theme-primary: #268c85; /* 湖水綠 Teal */
             --theme-accent: #d4e8e6;  /* 柔和淺綠 Light Teal */
             --theme-dark: #58595b;    /* 品牌深灰 Dark Grey */
@@ -168,7 +168,7 @@
         .gauge-progress { fill: none; stroke: var(--theme-primary); stroke-width: 8; stroke-linecap: round; transition: stroke-dashoffset 0.8s ease-out; }
         .theme-accent-border { border-top: 4px solid var(--theme-primary); }
 
-        /* 新增：未填寫防呆高亮樣式 */
+        /* 未填寫防呆高亮樣式 */
         .unfilled-highlight {
             background-color: #fef9c3 !important; /* Tailwind yellow-100 */
             border-color: #facc15 !important; /* Tailwind yellow-400 */
@@ -186,6 +186,13 @@
         }
         .prog-incomplete {
             background-color: #fef3c7; color: #b45309; border-color: #fde68a;
+        }
+
+        /* 拖曳上傳區域的互動樣式 */
+        #uploadDropzone.dragover {
+            background-color: #f0fdfa !important; /* Tailwind teal-50 */
+            border-color: #0d9488 !important; /* Tailwind teal-600 */
+            transform: scale(1.02);
         }
 
         /* =========================================================
@@ -312,11 +319,14 @@
             <h1 class="text-xl md:text-2xl font-extrabold text-slate-900 mb-1">aHUS 罕病通報/健保審查條件評估工具</h1>
             <p class="text-slate-500 font-medium text-xs md:text-sm mb-4">Clinical Decision Support Tool</p>
             
-            <!-- 新增：上傳前次匯出之Excel評估表 按鈕 -->
-            <div class="flex justify-center no-print">
-                <label class="cursor-pointer flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 text-[var(--theme-primary)] border border-teal-200 rounded-lg text-sm font-bold shadow-sm transition-all hover:shadow">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
-                    上傳前次匯出之Excel評估表
+            <!-- 上傳前次匯出之Excel評估表 按鈕 (支援拖曳上傳) -->
+            <div class="flex justify-center no-print w-full max-w-sm mx-auto">
+                <label id="uploadDropzone" class="cursor-pointer flex flex-col items-center justify-center w-full py-3 px-4 bg-white hover:bg-slate-50 text-[var(--theme-primary)] border-2 border-dashed border-teal-300 rounded-xl text-sm font-bold shadow-sm transition-all hover:shadow hover:border-teal-500" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                        上傳前次匯出之 Excel 評估表
+                    </div>
+                    <span class="text-[11px] text-slate-400 font-normal mt-1.5 hidden md:block tracking-wide">點擊選擇檔案，或直接將檔案拖曳至此處框內</span>
                     <input type="file" id="uploadExcel" accept=".xls,.html" class="hidden" onchange="importFromExcel(event)">
                 </label>
             </div>
@@ -420,7 +430,7 @@
             </div>
         </div>
 
-        <!-- 獨立的重置按鈕 (移至 Part 1 上方置中) -->
+        <!-- 獨立的重置按鈕 -->
         <div class="flex justify-center mb-6 no-print">
             <button type="button" onclick="resetEntireForm()" class="flex items-center gap-2 px-6 py-2.5 bg-white text-slate-600 border border-slate-300 rounded-xl font-bold shadow-sm hover:shadow hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
@@ -528,7 +538,7 @@
                                         { n: "Reticulocyte(%)", c: "retic", l: "retic", id: "in_retic", p: "0.45-2.28%" },
                                         { n: "sCr", c: "scr", l: "scr", id: "in_scr", p: "> 2" },
                                         { n: "LDH", c: "ldh", l: "ldh", p: "125-220", id: "in_ldh" },
-                                        { n: "Haptoglobin(g/L)", c: "hap", l: "hap", id: "in_hap", p: "0.3-2.0" },
+                                        { n: "Haptoglobin(mg/dL)", c: "hap", l: "hap", id: "in_hap", p: "30-200" },
                                         { n: "血壓", c: "bp", l: "sd", p: "輸入數值" }
                                     ];
                                     window.trendItems.forEach(t => {
@@ -686,7 +696,7 @@
                             </tbody>
                             <tbody id="sec-adamts">
                                 <tr class="label-row"><td>評估項目</td><td>評估日期</td><td>紀錄</td><td>條件核對結果</td></tr>
-                                <tr><td class="item-header font-bold">ADAMTS13 (PE前)</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><input type="text" inputmode="decimal" oninput="logicCheck(this, 'adamts')" id="in_adamts" onblur="formatPercent(this)" placeholder="> 10%"></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
+                                <tr><td class="item-header font-bold">ADAMTS13 (PE/PT前)</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><input type="text" inputmode="decimal" oninput="logicCheck(this, 'adamts')" id="in_adamts" onblur="formatPercent(this)" placeholder="> 10%"></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -928,7 +938,7 @@
             </div>
         </section>
 
-        <!-- 新增：PE/PT 治療綜合分析專區 -->
+        <!-- PE/PT 治療綜合分析專區 -->
         <section class="mb-8 border-2 border-[var(--theme-primary)] rounded-xl overflow-hidden shadow-sm bg-slate-50/50 no-print" id="ptpe-analysis-section">
             <div class="major-section-header bg-gradient-to-r from-[var(--theme-dark)] to-[var(--theme-primary)] text-white cursor-pointer select-none py-3 px-4 relative" onclick="toggleSection('sec-charts-ptpe', 'icon-charts-ptpe')">
                 <div class="font-extrabold text-center text-sm md:text-base uppercase tracking-wider flex justify-center items-center gap-2">
@@ -993,7 +1003,6 @@
 <script>
     let charts = {};
 
-    // 新增：客製化 Alert 提示框
     function showCustomAlert(msg, isSuccess = false) {
         const alertDiv = document.createElement('div');
         const bgColor = isSuccess ? 'bg-emerald-600' : 'bg-red-600';
@@ -1007,7 +1016,6 @@
         setTimeout(() => alertDiv.remove(), 4000);
     }
 
-    // 新增：區塊進度計算與防呆高亮邏輯
     function updateProgressUI() {
         const sections = [
             { id: 'sec-treatment', headerId: 'prog-sec-treatment' },
@@ -1033,7 +1041,6 @@
             let filled = 0;
 
             if (sec.id === 'sec-treatment') {
-                // 客製化邏輯：PE/PT 視為同一項目 (完成其一即皆完成)，加上 HD 共 2 項
                 total = 2;
                 const pt = document.getElementById('in_pt_count');
                 const pe = document.getElementById('in_pe_count');
@@ -1060,7 +1067,6 @@
                 }
 
             } else if (sec.id === 'sec-cob') {
-                // 客製化邏輯：Cobalamin C 只要有任一項填寫，即算 1/1 完成
                 total = 1;
                 const cobInputs = Array.from(tbody.querySelectorAll('select'));
                 const anyFilled = cobInputs.some(el => el.value !== '' && el.value !== '請選擇');
@@ -1073,7 +1079,6 @@
                 }
 
             } else if (sec.id === 'sec-monitoring') {
-                // 客製化邏輯：連續監測只計算第一筆原始資料(共8個欄位)，後續動態新增的欄位不計入比例
                 const allVisibleInputs = Array.from(tbody.querySelectorAll('td[data-label="評估紀錄"] input:not([type="hidden"])')).filter(el => {
                     const tr = el.closest('tr');
                     return tr && tr.style.display !== 'none';
@@ -1089,7 +1094,6 @@
                         if (isFilled) filled++;
                     }
                     
-                    // 動態新增的欄位即便不計入比例，仍保持直覺的漏填反黃防呆機制
                     if (isFilled) {
                         el.classList.remove('unfilled-highlight');
                     } else {
@@ -1098,17 +1102,14 @@
                 });
 
             } else {
-                // 預設邏輯：針對其他所有一般區塊
                 const inputs = Array.from(tbody.querySelectorAll('td[data-label="評估紀錄"] input:not([type="hidden"]), td[data-label="評估紀錄"] select'));
                 const radios = Array.from(tbody.querySelectorAll('input[type="radio"]'));
                 
-                // 過濾掉隱藏或未展開的列
                 const visibleInputs = inputs.filter(el => {
                     const tr = el.closest('tr');
                     return tr && tr.style.display !== 'none';
                 });
 
-                // 計算輸入框與選單
                 visibleInputs.forEach(el => {
                     total++;
                     let isFilled = false;
@@ -1126,7 +1127,6 @@
                     }
                 });
 
-                // 計算 PLASMIC Score 單選按鈕 (依 Group 計數)
                 if (radios.length > 0) {
                     const groups = {};
                     radios.forEach(r => {
@@ -1148,7 +1148,6 @@
                 }
             }
 
-            // 更新 Badge 狀態
             badge.innerText = `完成 ${filled}/${total}`;
             if (filled === total && total > 0) {
                 badge.classList.remove('prog-incomplete');
@@ -1160,7 +1159,34 @@
         });
     }
 
-    // 新增：從 Excel 還原資料功能
+    // --- 新增：拖曳上傳 (Drag and Drop) 支援邏輯 ---
+    function handleDragOver(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        document.getElementById('uploadDropzone').classList.add('dragover');
+    }
+
+    function handleDragLeave(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        document.getElementById('uploadDropzone').classList.remove('dragover');
+    }
+
+    function handleDrop(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        const dropzone = document.getElementById('uploadDropzone');
+        dropzone.classList.remove('dragover');
+        
+        const file = event.dataTransfer.files[0];
+        if (file) {
+            // 封裝成原先 onchange 預期的 Event 格式，無縫橋接原有的 importFromExcel
+            const mockEvent = { target: { files: [file], value: '' } };
+            importFromExcel(mockEvent);
+        }
+    }
+
+    // 從 Excel 還原資料功能
     function importFromExcel(event) {
         const file = event.target.files[0];
         if (!file) return;
@@ -1172,7 +1198,8 @@
             // 驗證是否為本系統匯出之檔案
             if (!htmlText.includes('aHUS疑似個案Inclusion tests Checklist') || !htmlText.includes('urn:schemas-microsoft-com:office:excel')) {
                 showCustomAlert('上傳之Excel格式不符');
-                event.target.value = '';
+                // 嘗試清空 input (如果是來自 mockEvent 則無 value 屬性，加個 try-catch 保護)
+                try { event.target.value = ''; } catch(err){}
                 return;
             }
 
@@ -1181,7 +1208,6 @@
 
             const normalizeText = (t) => t ? t.replace(/[\s\u00A0\u200B-\u200D\uFEFF\r\n\t↳\(\)（）]/g, '').toLowerCase() : '';
 
-            // 共用的日期格式正規化函式
             const normalizeDate = (dVal) => {
                 if (!dVal) return '';
                 let cleaned = dVal.replace(/年|月/g, '-').replace(/日/g, '').replace(/\//g, '-').replace(/[\s\u00A0\u200B-\u200D\uFEFF\r\n\t]/g, '');
@@ -1207,7 +1233,6 @@
                 return cleaned;
             };
 
-            // 1. 預先處理 PT / PE 次數，觸發動態欄位生成，確保架構與匯入檔一致
             const headers = Array.from(importedDoc.querySelectorAll('td.item-header, td:first-child'));
             
             const ptHeader = headers.find(td => normalizeText(td.textContent).includes('plasmatransfusion'));
@@ -1238,7 +1263,6 @@
                 }
             }
 
-            // 2. 還原基本患者資訊
             const impLabels = Array.from(importedDoc.querySelectorAll('label'));
             const getBasicVal = (labelText) => {
                 const lbl = impLabels.find(l => l.textContent.includes(labelText));
@@ -1268,7 +1292,6 @@
                 }
             }
 
-            // 3. 還原表格輸入欄位與選擇核取
             const importedRows = Array.from(importedDoc.querySelectorAll('tbody tr'));
             const ptImportedDates = [];
             const peImportedDates = [];
@@ -1277,15 +1300,13 @@
             importedRows.forEach(tr => {
                 const textContent = normalizeText(tr.textContent); 
                 
-                // 判斷目前所在的區塊 (狀態機修正：因為 normalizeText 會吃掉括號，改比對純中文字)
                 if (textContent.includes('plasmatransfusion')) currentSection = 'pt';
                 else if (textContent.includes('plasmaexchange')) currentSection = 'pe';
-                else if (textContent.includes('hd施行次數')) currentSection = ''; // 離開 PE/PT 區塊
+                else if (textContent.includes('hd施行次數')) currentSection = ''; 
                 
-                // 尋找「第N次治療」的特徵，並對號入座放入陣列
                 const match = textContent.match(/第(\d+)次治療/);
                 if (match && (currentSection === 'pt' || currentSection === 'pe')) {
-                    const idx = parseInt(match[1], 10) - 1; // 轉為 0-based index
+                    const idx = parseInt(match[1], 10) - 1; 
                     
                     let foundDateVal = '';
                     
@@ -1315,7 +1336,6 @@
             let peLiveCount = 0;
 
             liveRows.forEach(liveTr => {
-                // --- 針對 PT/PE 明細列，直接從陣列中依序取值 ---
                 if (liveTr.classList.contains('dynamic-row-pt')) {
                     const dVal = ptImportedDates[ptLiveCount];
                     if (dVal && /^\d{4}-\d{2}-\d{2}$/.test(dVal)) {
@@ -1340,7 +1360,6 @@
                     return; 
                 }
 
-                // --- 常規項目的配對與還原 ---
                 let impTr = null;
 
                 if (liveTr.id) {
@@ -1358,7 +1377,6 @@
                 }
 
                 if (impTr) {
-                    // 填入常規項目日期
                     const liveDate = liveTr.querySelector('input[type="date"]');
                     if (liveDate) {
                         let foundDateVal = '';
@@ -1382,11 +1400,8 @@
                         }
                     }
 
-                    // 填入紀錄數值或選項
                     const liveRecords = liveTr.querySelectorAll('td[data-label="評估紀錄"] input:not([type="hidden"]), td[data-label="評估紀錄"] select');
                     Array.from(liveRecords).forEach(liveInput => {
-                        // 🚨 終極修復點：禁止母項目二次觸發更新！
-                        // 否則它會啟動自我毀滅機制，把剛剛填好日期的明細列全部刪除重算。
                         if (liveInput.id === 'in_pt_count' || liveInput.id === 'in_pe_count') return;
 
                         const liveCell = liveInput.closest('td');
@@ -1416,7 +1431,6 @@
                         }
                     });
 
-                    // 填入 PLASMIC Score 單選框
                     ['YES', 'NO'].forEach(label => {
                         const liveCell = liveTr.querySelector(`td[data-label="${label}"]`);
                         if (liveCell) {
@@ -1431,7 +1445,6 @@
                 }
             });
 
-            // 4. 重算總結邏輯與還原監測展開狀態
             if (typeof handleBilirubin === 'function') handleBilirubin('total');
             updatePlasmicAuto();
             calcPlasmic();
@@ -1461,12 +1474,11 @@
 
             updateProgressUI();
             showCustomAlert('匯入成功，已自動還原資料與分析結果！', true);
-            event.target.value = ''; // 清除 input，以允許重複選取相同檔案
+            try { event.target.value = ''; } catch(err){}
         };
         reader.readAsText(file);
     }
 
-    // 專門繪製 PE/PT 黃色背景區間的外掛插件
     const treatmentPeriodPlugin = {
         id: 'treatmentPeriodPlugin',
         beforeDraw(chart) {
@@ -1479,7 +1491,6 @@
             let startX = x.getPixelForTick(startIdx);
             let endX = x.getPixelForTick(endIdx);
             
-            // 讓單一治療點也能有適當的寬度以顯示黃色高亮
             if (startX === endX) {
                 startX -= 30;
                 endX += 30;
@@ -1488,20 +1499,18 @@
                 endX += 10;
             }
 
-            // 確保塗色不超出圖表區域
             if (startX < left) startX = left;
             if (endX > right) endX = right;
 
             ctx.save();
-            ctx.fillStyle = 'rgba(253, 224, 71, 0.25)'; // Tailwind yellow-300 with transparency
+            ctx.fillStyle = 'rgba(253, 224, 71, 0.25)'; 
             ctx.fillRect(startX, top, endX - startX, bottom - top);
             
-            ctx.fillStyle = 'rgba(217, 119, 6, 0.9)'; // Tailwind amber-600
+            ctx.fillStyle = 'rgba(217, 119, 6, 0.9)'; 
             ctx.font = 'bold 11px Inter, sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
             
-            // 防止文字超出左右邊界
             let textX = startX + (endX - startX) / 2;
             if (textX < left + 35) textX = left + 35;
             if (textX > right - 35) textX = right - 35;
@@ -1511,9 +1520,6 @@
         }
     };
 
-    // ==========================================
-    // 展開 / 收合區塊邏輯
-    // ==========================================
     function toggleSection(sectionId, iconId) {
         const sec = document.getElementById(sectionId);
         const icon = document.getElementById(iconId);
@@ -1526,7 +1532,6 @@
         }
     }
 
-    // 切換 FAB 按鈕的載入狀態
     function setFabLoading(isLoading, btnId) {
         const btn = document.getElementById(btnId);
         if (!btn) return;
@@ -1545,7 +1550,6 @@
         }
     }
 
-    // 匯出為圖檔功能
     function exportToImage() {
         const element = document.getElementById('mainContent');
         window.scrollTo(0, 0);
@@ -1553,7 +1557,6 @@
         
         setFabLoading(true, 'btnImage');
 
-        // --- NEW: 匯出前強制在「真實畫面」展開所有隱藏區塊，讓 Chart.js 有實體尺寸進行渲染 ---
         const originallyHidden = [];
         document.querySelectorAll('.section-content').forEach(sec => {
             if (sec.classList.contains('hidden')) {
@@ -1562,12 +1565,10 @@
             }
         });
 
-        // 強制圖表重新計算尺寸以填滿剛展開的區塊
         Object.values(charts).forEach(c => {
             if (c && typeof c.resize === 'function') c.resize();
         });
 
-        // 給予瀏覽器與 Chart.js 緩衝時間進行渲染 (500ms)，確保圖表不會空白
         setTimeout(() => {
             html2canvas(element, {
                 scale: 2, 
@@ -1580,7 +1581,6 @@
                     const toggleBadges = clonedDoc.querySelectorAll('.toggle-badge');
                     toggleBadges.forEach(badge => badge.style.display = 'none');
 
-                    // 移除 UI 防呆用的進度標籤與黃色底色，讓畫面保持專業
                     clonedDoc.querySelectorAll('.prog-badge').forEach(badge => badge.remove());
                     clonedDoc.querySelectorAll('.unfilled-highlight').forEach(el => el.classList.remove('unfilled-highlight'));
 
@@ -1589,7 +1589,6 @@
                     clonedElement.style.maxWidth = 'none';
                     clonedElement.style.padding = '20px 40px'; 
 
-                    // --- 解決圖表不顯示或截斷優化：將 Canvas 完美轉換為靜態 Img ---
                     const originalCanvases = document.querySelectorAll('canvas');
                     const clonedCanvases = clonedDoc.querySelectorAll('canvas');
                     originalCanvases.forEach((canvas, i) => {
@@ -1604,7 +1603,6 @@
                         }
                     });
 
-                    // --- 解決文字截斷優化：將輸入框替換為靜態 div 以確保完美渲染 ---
                     const inputs = clonedDoc.querySelectorAll('input:not([type="radio"]):not([type="checkbox"]), select');
                     inputs.forEach(input => {
                         const div = clonedDoc.createElement('div');
@@ -1613,8 +1611,7 @@
                             val = input.options[input.selectedIndex]?.text || '';
                             if (val === '請選擇') val = '';
                         }
-                        div.innerText = val || ' '; // 空值塞入空白以撐開高度
-                        // 賦予與輸入框相同的 CSS 樣式，並設定垂直置中
+                        div.innerText = val || ' '; 
                         div.style.cssText = `
                             width: 100%; border: 1.5px solid #cbd5e1; border-radius: 6px;
                             padding: 10px 8px; font-size: 14px; background-color: #fff;
@@ -1625,7 +1622,6 @@
                         input.parentNode.replaceChild(div, input);
                     });
                     
-                    // 額外增加表格儲存格的上下內距，防止其他文字貼邊
                     const fixStyle = clonedDoc.createElement('style');
                     fixStyle.innerHTML = `td { padding-top: 14px !important; padding-bottom: 14px !important; }`;
                     clonedDoc.head.appendChild(fixStyle);
@@ -1641,7 +1637,7 @@
                         setTimeout(() => { 
                             document.body.removeChild(link); 
                             window.URL.revokeObjectURL(url); 
-                            originallyHidden.forEach(sec => sec.classList.add('hidden')); // 還原顯示狀態
+                            originallyHidden.forEach(sec => sec.classList.add('hidden')); 
                             setFabLoading(false, 'btnImage'); 
                         }, 100);
                     }, 'image/png', 1.0);
@@ -1650,17 +1646,16 @@
                     const link = document.createElement('a');
                     link.href = imgData; link.download = `aHUS_Assessment_${new Date().toISOString().slice(0,10)}.png`;
                     document.body.appendChild(link); link.click(); document.body.removeChild(link);
-                    originallyHidden.forEach(sec => sec.classList.add('hidden')); // 還原顯示狀態
+                    originallyHidden.forEach(sec => sec.classList.add('hidden')); 
                     setFabLoading(false, 'btnImage');
                 }
             }).catch(() => {
-                originallyHidden.forEach(sec => sec.classList.add('hidden')); // 還原顯示狀態
+                originallyHidden.forEach(sec => sec.classList.add('hidden')); 
                 setFabLoading(false, 'btnImage');
             });
         }, 500);
     }
 
-    // 匯出為 PDF 檔案功能 (修復遺失的函數)
     function exportToPDF() {
         const { jsPDF } = window.jspdf;
         const element = document.getElementById('mainContent');
@@ -1779,7 +1774,6 @@
         }, 500);
     }
 
-    // 匯出為 Excel 檔案功能
     function exportToExcel() {
         setFabLoading(true, 'btnExcel');
         setTimeout(() => {
@@ -1803,18 +1797,14 @@
                 clonedInputs[i].parentNode.replaceChild(span, clonedInputs[i]);
             });
 
-            // 1. 強制展開所有隱藏的區域
             originalTable.querySelectorAll('.section-content').forEach(sec => sec.classList.remove('hidden'));
             
-            // 2. 強制顯示所有被隱藏的資料列 (如連續監測未輸入的列)，避免 Excel 判定為無效結構
             originalTable.querySelectorAll('tr').forEach(tr => {
                 if (tr.style.display === 'none') tr.style.display = '';
             });
 
-            // 3. 移除不必要的 UI 與會嚴重破壞 Excel 解析的元素
             originalTable.querySelectorAll('.toggle-badge, .prog-badge, .no-print, canvas, svg, button, script').forEach(el => el.remove());
 
-            // 4. 將 Tailwind 顏色狀態轉換為 Inline Style，確保 Excel 能夠正確渲染核對結果的顏色
             originalTable.querySelectorAll('.result-cell').forEach(cell => {
                 if (cell.classList.contains('text-success')) cell.style.color = '#10b981';
                 else if (cell.classList.contains('text-alert')) cell.style.color = '#ef4444';
@@ -1822,13 +1812,11 @@
                 else cell.style.color = '#64748b';
             });
             
-            // 確保特殊標題列在 Excel 也能顯示正確的深色背景與白字
             originalTable.querySelectorAll('.bg-slate-800').forEach(el => {
                 el.style.backgroundColor = '#1e293b';
                 el.style.color = '#ffffff';
             });
 
-            // 5. 核心優化：植入微軟神級內碼，強制所有包含日期的欄位為「純文字格式」，阻絕 Excel 竄改日期
             originalTable.querySelectorAll('td[data-label="評估日期"], .auto-date').forEach(el => {
                 const td = el.tagName === 'TD' ? el : el.closest('td');
                 if (td) td.style.cssText += 'mso-number-format:"\\@";';
@@ -1857,7 +1845,6 @@
                 </html>
             `;
             
-            // 加上 \uFEFF (BOM) 確保 Excel 直接開啟時不會產生中文亂碼
             const blob = new Blob(['\uFEFF' + html], { type: 'application/vnd.ms-excel;charset=utf-8' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
@@ -1896,7 +1883,7 @@
 
         updateCharts();
         calculateNHICompliance();
-        updateProgressUI(); // 同步重置計數器與防呆樣式
+        updateProgressUI(); 
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
@@ -1914,7 +1901,6 @@
         let currentRow = inputEl.closest('tr');
         const titleName = type === 'pt' ? 'PT' : 'PE';
 
-        // 💡 採納建議：取消 value="${today}" 的預設綁定，讓資料保持空白，確保手動或 Excel 匯入時不被預設日期掩蓋
         for (let i = 1; i <= count; i++) {
             const newRow = document.createElement('tr');
             newRow.className = `dynamic-row-${type}`; 
@@ -1948,7 +1934,7 @@
                     dateInput.value = today;
                 }
             }
-            updateProgressUI(); // 顯示新欄位後同步更新計數器
+            updateProgressUI(); 
         }
     }
 
@@ -2075,8 +2061,8 @@
                 text = (num > 1.0) ? "異常" : (num >= 0.2 && num <= 1.0 ? "正常" : "異常");
                 style = (num > 1.0 || num < 0.2) ? "text-alert" : "text-success"; break;
             case 'hap':
-                text = (num < 0.3) ? "符合健保申請條件" : (num >= 0.3 && num <= 2.0 ? "正常區間" : "異常");
-                style = (num < 0.3) ? "text-success" : (num >= 0.3 && num <= 2.0 ? "text-neutral" : "text-alert"); 
+                text = (num < 30) ? "符合健保申請條件" : (num >= 30 && num <= 200 ? "正常區間" : "異常");
+                style = (num < 30) ? "text-success" : (num >= 30 && num <= 200 ? "text-neutral" : "text-alert"); 
                 updatePlasmicAuto(); break;
             case 'schisto':
                 text = (val === "Postive") ? "符合條件" : "建議持續監測";
@@ -2158,7 +2144,7 @@
         const scr = getWorstValueForPlasmic('track-scr', 'max');
 
         if(!isNaN(plt)) { document.getElementsByName('p0')[plt < 30 ? 0 : 1].checked = true; }
-        if(!isNaN(hap) || !isNaN(retic)) { document.getElementsByName('p1')[(retic > 2.5 || (hap > 0 && hap < 0.3)) ? 0 : 1].checked = true; }
+        if(!isNaN(hap) || !isNaN(retic)) { document.getElementsByName('p1')[(retic > 2.5 || (hap > 0 && hap < 30)) ? 0 : 1].checked = true; }
         if(!isNaN(scr)) { document.getElementsByName('p6')[scr < 2.0 ? 0 : 1].checked = true; }
         calcPlasmic();
     }
@@ -2173,7 +2159,6 @@
     function updateCharts() {
         const fields = ['hb','plt','retic','scr','ldh','hap','bp'];
         fields.forEach(f => {
-            // 自動抓取該項目的檢驗日期作為時間軸 (取 MM-DD 格式避免太擠)
             const dateInputs = document.querySelectorAll(`.date-${f}`);
             const labels = Array.from(dateInputs).map((input, index) => {
                 return input.value ? input.value.substring(5) : `T${index + 1}`;
@@ -2185,7 +2170,7 @@
                 const sysData = Array.from(sysInputs).map(i => parseFloat(i.value) || null);
                 const diaData = Array.from(diaInputs).map(i => parseFloat(i.value) || null);
                 if(charts.bp) {
-                    charts.bp.data.labels = labels; // 連動 X 軸時間
+                    charts.bp.data.labels = labels; 
                     charts.bp.data.datasets[0].data = sysData;
                     charts.bp.data.datasets[1].data = diaData;
                     charts.bp.update();
@@ -2198,7 +2183,7 @@
                 return isNaN(v) ? null : v;
             });
             if(charts[f]) { 
-                charts[f].data.labels = labels; // 連動 X 軸時間
+                charts[f].data.labels = labels; 
                 charts[f].data.datasets[0].data = data; 
                 charts[f].update(); 
             }
@@ -2209,11 +2194,9 @@
             }
         });
         
-        // 同步更新 PE/PT 專屬趨勢分析
         updatePTPECharts();
     }
 
-    // 更新 PE/PT 專屬綜合分析圖表的計算邏輯
     function updatePTPECharts() {
         const ptDates = Array.from(document.querySelectorAll('.dynamic-row-pt .auto-date')).map(el => el.value).filter(v => v);
         const peDates = Array.from(document.querySelectorAll('.dynamic-row-pe .auto-date')).map(el => el.value).filter(v => v);
@@ -2222,7 +2205,6 @@
         const emptyState = document.getElementById('ptpe-empty-state');
         if (treatmentDates.length === 0) {
             if(emptyState) emptyState.style.display = 'flex';
-            // 清空資料確保不殘留
             ['ptpe_hb', 'ptpe_plt', 'ptpe_scr', 'ptpe_ldh'].forEach(id => {
                 if(charts[id]) {
                     charts[id].data.labels = [];
@@ -2250,7 +2232,6 @@
             });
             const labData = dates.map((d, i) => ({ date: d, val: values[i] })).filter(x => x.date && x.val !== null);
             
-            // 獨立時間軸: 以檢測時間為主，治療明細為輔 (聯集兩者，確保數據曲線完整呈現)
             let chartDatesSet = new Set([...labData.map(x => x.date), ...treatmentDates]);
             chartDatesSet.delete("");
             let chartSortedDates = Array.from(chartDatesSet).sort();
@@ -2270,27 +2251,22 @@
                 charts[chartId].update();
             }
 
-            // 判斷是否低於/高於治療前數值
             const alertEl = document.getElementById(`ptpe-alert-${field}`);
             if (alertEl) {
                 let preVal = null;
                 let postVal = null;
                 
-                // 找出治療前(含第一天)的最後一筆數值
                 const preData = labData.filter(d => d.date <= firstTrDate).sort((a,b) => a.date.localeCompare(b.date));
                 if (preData.length > 0) preVal = preData[preData.length - 1].val;
                 
-                // 找出治療後(含最後一天)的最新一筆數值
                 const postData = labData.filter(d => d.date >= lastTrDate).sort((a,b) => a.date.localeCompare(b.date));
                 if (postData.length > 0) postVal = postData[postData.length - 1].val;
 
                 let shouldAlert = false;
                 if (preVal !== null && postVal !== null) {
                     if (field === 'scr' || field === 'ldh') {
-                        // sCr與LDH數值升高或持平代表未改善
                         shouldAlert = postVal >= preVal;
                     } else {
-                        // Hb與Plt數值下降或持平代表未改善
                         shouldAlert = postVal <= preVal;
                     }
                 }
@@ -2386,7 +2362,7 @@
             { label: "溶血性貧血 (Hb < 10.0 g/dL)", val: (hb < 10.0), weight: 1 },
             { label: "血小板減少 (Plt < 150,000/μL)", val: (plt < 150), weight: 1 },
             { label: "血清 LDH 升高 (高於醫院正常值)", val: (ldh > 220), weight: 1 },
-            { label: "Haptoglobin 降低 (低於標準值或不可測)", val: (hap < 0.3), weight: 1 }
+            { label: "Haptoglobin 降低 (低於標準值或不可測)", val: (hap < 30), weight: 1 }
         ], false);
 
         renderCheck('list-tma-判定', [
@@ -2468,7 +2444,6 @@
             }
         });
 
-        // 初始化 PE/PT 專用的四個圖表
         const ptpeCfg = (l, c) => ({ 
             type: 'line', 
             data: { 
@@ -2492,10 +2467,9 @@
         document.querySelectorAll('.auto-date').forEach(i => i.value = today);
         initCharts(); 
         calculateNHICompliance();
-        updatePTPECharts(); // 初始化時檢測一次 PE/PT 分析區域空狀態
-        updateProgressUI(); // 初始化進度計數與樣式
+        updatePTPECharts(); 
+        updateProgressUI(); 
 
-        // 新增：監聽表單的即時變動，觸發計數器與防呆樣式更新
         document.getElementById('checklistForm').addEventListener('input', updateProgressUI);
         document.getElementById('checklistForm').addEventListener('change', updateProgressUI);
     };
