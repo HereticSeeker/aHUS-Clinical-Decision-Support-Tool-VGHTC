@@ -1660,7 +1660,7 @@
         }, 500);
     }
 
-    // 匯出為 PDF 檔案功能
+    // 匯出為 PDF 檔案功能 (修復遺失的函數)
     function exportToPDF() {
         const { jsPDF } = window.jspdf;
         const element = document.getElementById('mainContent');
@@ -1669,7 +1669,6 @@
         
         setFabLoading(true, 'btnPdf');
 
-        // --- NEW: 匯出前強制在「真實畫面」展開所有隱藏區塊，讓 Chart.js 有實體尺寸進行渲染 ---
         const originallyHidden = [];
         document.querySelectorAll('.section-content').forEach(sec => {
             if (sec.classList.contains('hidden')) {
@@ -1678,12 +1677,10 @@
             }
         });
 
-        // 強制圖表重新計算尺寸以填滿剛展開的區塊
         Object.values(charts).forEach(c => {
             if (c && typeof c.resize === 'function') c.resize();
         });
 
-        // 給予瀏覽器與 Chart.js 緩衝時間進行渲染 (500ms)
         setTimeout(() => {
             html2canvas(element, {
                 scale: 2, 
@@ -1696,7 +1693,6 @@
                     const toggleBadges = clonedDoc.querySelectorAll('.toggle-badge');
                     toggleBadges.forEach(badge => badge.style.display = 'none');
 
-                    // 移除 UI 防呆用的進度標籤與黃色底色，讓畫面保持專業
                     clonedDoc.querySelectorAll('.prog-badge').forEach(badge => badge.remove());
                     clonedDoc.querySelectorAll('.unfilled-highlight').forEach(el => el.classList.remove('unfilled-highlight'));
 
@@ -1705,7 +1701,6 @@
                     clonedElement.style.maxWidth = 'none';
                     clonedElement.style.padding = '20px 40px'; 
 
-                    // --- 解決圖表不顯示或截斷優化：將 Canvas 完美轉換為靜態 Img ---
                     const originalCanvases = document.querySelectorAll('canvas');
                     const clonedCanvases = clonedDoc.querySelectorAll('canvas');
                     originalCanvases.forEach((canvas, i) => {
@@ -1720,7 +1715,6 @@
                         }
                     });
 
-                    // --- 解決文字截斷優化：將輸入框替換為靜態 div 以確保完美渲染 ---
                     const inputs = clonedDoc.querySelectorAll('input:not([type="radio"]):not([type="checkbox"]), select');
                     inputs.forEach(input => {
                         const div = clonedDoc.createElement('div');
@@ -1729,8 +1723,7 @@
                             val = input.options[input.selectedIndex]?.text || '';
                             if (val === '請選擇') val = '';
                         }
-                        div.innerText = val || ' '; // 空值塞入空白以撐開高度
-                        // 賦予與輸入框相同的 CSS 樣式，並設定垂直置中
+                        div.innerText = val || ' '; 
                         div.style.cssText = `
                             width: 100%; border: 1.5px solid #cbd5e1; border-radius: 6px;
                             padding: 10px 8px; font-size: 14px; background-color: #fff;
@@ -1741,15 +1734,19 @@
                         input.parentNode.replaceChild(div, input);
                     });
                     
-                    // 額外增加表格儲存格的上下內距，防止其他文字貼邊
                     const fixStyle = clonedDoc.createElement('style');
                     fixStyle.innerHTML = `td { padding-top: 14px !important; padding-bottom: 14px !important; }`;
                     clonedDoc.head.appendChild(fixStyle);
                 }
             }).then(canvas => {
-                const imgData = canvas.toDataURL('image/png');
+                const imgData = canvas.toDataURL('image/jpeg', 0.92);
                 
-                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pdf = new jsPDF({
+                    orientation: 'p',
+                    unit: 'mm',
+                    format: 'a4',
+                    compress: true 
+                });
                 const pdfWidth = pdf.internal.pageSize.getWidth();
                 const pdfHeight = pdf.internal.pageSize.getHeight();
                 
@@ -1761,23 +1758,22 @@
                 let heightLeft = scaledHeight;
                 let position = 0;
                 
-                pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, scaledHeight);
+                pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, scaledHeight, '', 'FAST');
                 heightLeft -= pdfHeight;
                 
                 while (heightLeft > 0) {
                     position = heightLeft - scaledHeight;
                     pdf.addPage();
-                    pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, scaledHeight);
+                    pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, scaledHeight, '', 'FAST');
                     heightLeft -= pdfHeight;
                 }
                 
                 pdf.save(`aHUS_Assessment_${new Date().toISOString().slice(0,10)}.pdf`);
                 
-                // 還原原本隱藏的區塊
                 originallyHidden.forEach(sec => sec.classList.add('hidden'));
                 setFabLoading(false, 'btnPdf');
             }).catch(() => { 
-                originallyHidden.forEach(sec => sec.classList.add('hidden')); // 還原顯示狀態
+                originallyHidden.forEach(sec => sec.classList.add('hidden')); 
                 setFabLoading(false, 'btnPdf'); 
             });
         }, 500);
