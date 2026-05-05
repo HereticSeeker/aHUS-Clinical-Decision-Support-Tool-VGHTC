@@ -559,7 +559,7 @@
                                             document.write(`<tr id="tr-${t.c}-${i}" style="${i > 0 ? 'display: none;' : ''}">
                                                 ${i===0 ? `<td id="td-rs-${t.c}" rowspan="1" class="hidden md:table-cell font-bold text-slate-700 bg-teal-50/30 align-middle text-center border-r border-teal-100">${t.n}</td>` : ''}
                                                 <td class="md:hidden item-header bg-teal-50/50 text-teal-800">${t.n} (第 ${i+1} 次)</td>
-                                                <td data-label="評估日期"><input type="date" class="auto-date date-${t.c}" onchange="updateCharts()"></td>
+                                                <td data-label="評估日期"><input type="date" class="trend-date date-${t.c}" onchange="updateCharts()"></td>
                                                 <td data-label="評估紀錄">${inputHtml}</td>
                                                 <td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td>
                                             </tr>`);
@@ -1517,12 +1517,6 @@
                         if (row) {
                             if (i <= showUntil) {
                                 row.style.display = '';
-                                if (i === showUntil && maxIndex !== 4) {
-                                    const dateInput = row.querySelector('input[type="date"]');
-                                    if (dateInput && !dateInput.value) {
-                                        dateInput.value = new Date().toISOString().split('T')[0];
-                                    }
-                                }
                             } else {
                                 row.style.display = 'none';
                                 row.querySelectorAll('input').forEach(inp => inp.value = '');
@@ -1987,9 +1981,13 @@
 
     function checkReveal(category, index, el) {
         let hasValue = false;
+        let dateInput = null;
+
         if (el) {
+            const row = el.closest('tr');
+            if (row) dateInput = row.querySelector('.trend-date');
+
             if (el.classList.contains('track-bp-sys') || el.classList.contains('track-bp-dia')) {
-                const row = el.closest('tr');
                 const sys = row.querySelector('.track-bp-sys');
                 const dia = row.querySelector('.track-bp-dia');
                 if ((sys && sys.value.trim() !== '') || (dia && dia.value.trim() !== '')) {
@@ -2002,17 +2000,17 @@
             hasValue = true; 
         }
         
-        if (!hasValue) return;
-
-        if (index < 4) {
-            const nextIndex = index + 1;
-            const nextRow = document.getElementById(`tr-${category}-${nextIndex}`);
-            if (nextRow && nextRow.style.display === 'none') {
-                nextRow.style.display = ''; 
-                const today = new Date().toISOString().split('T')[0];
-                const dateInput = nextRow.querySelector(`input[type="date"]`);
-                if (dateInput && !dateInput.value) {
-                    dateInput.value = today;
+        // 新增規則：當數值被清除時，將已填寫的評估日期自動恢復空白，並連動更新圖表與健保計算
+        if (!hasValue) {
+            if (dateInput) dateInput.value = '';
+            if (typeof updateCharts === 'function') updateCharts();
+            if (typeof calculateNHICompliance === 'function') calculateNHICompliance();
+        } else {
+            if (index < 4) {
+                const nextIndex = index + 1;
+                const nextRow = document.getElementById(`tr-${category}-${nextIndex}`);
+                if (nextRow && nextRow.style.display === 'none') {
+                    nextRow.style.display = ''; 
                 }
             }
         }
@@ -2262,15 +2260,28 @@
         const fields = ['hb','plt','retic','scr','ldh','hap','bp'];
         fields.forEach(f => {
             const dateInputs = document.querySelectorAll(`.date-${f}`);
-            const labels = Array.from(dateInputs).map((input, index) => {
-                return input.value ? input.value.substring(5) : `T${index + 1}`;
-            });
 
             if(f === 'bp') {
                 const sysInputs = document.querySelectorAll(`.track-bp-sys`);
                 const diaInputs = document.querySelectorAll(`.track-bp-dia`);
-                const sysData = Array.from(sysInputs).map(i => parseFloat(i.value) || null);
-                const diaData = Array.from(diaInputs).map(i => parseFloat(i.value) || null);
+                const labels = [];
+                const sysData = [];
+                const diaData = [];
+                
+                dateInputs.forEach((dateInput, index) => {
+                    const hasDate = !!dateInput.value;
+                    const sysVal = sysInputs[index] ? sysInputs[index].value.trim() : '';
+                    const diaVal = diaInputs[index] ? diaInputs[index].value.trim() : '';
+                    const hasSys = sysVal !== '';
+                    const hasDia = diaVal !== '';
+                    
+                    if (hasDate || hasSys || hasDia) {
+                        labels.push(dateInput.value ? dateInput.value.substring(5) : `T${index + 1}`);
+                        sysData.push(hasSys ? parseFloat(sysVal) : null);
+                        diaData.push(hasDia ? parseFloat(diaVal) : null);
+                    }
+                });
+
                 if(charts.bp) {
                     charts.bp.data.labels = labels; 
                     charts.bp.data.datasets[0].data = sysData;
@@ -2279,11 +2290,23 @@
                 }
                 return;
             }
+            
             const inputs = document.querySelectorAll(`.track-${f}`);
-            const data = Array.from(inputs).map(i => {
-                const v = parseFloat(i.value.replace('%','').replace(/,/g, ''));
-                return isNaN(v) ? null : v;
+            const labels = [];
+            const data = [];
+            
+            dateInputs.forEach((dateInput, index) => {
+                const valInput = inputs[index];
+                const hasDate = !!dateInput.value;
+                const hasVal = valInput && valInput.value.trim() !== '';
+                
+                if (hasDate || hasVal) {
+                    labels.push(dateInput.value ? dateInput.value.substring(5) : `T${index + 1}`);
+                    const v = parseFloat(valInput.value.replace('%','').replace(/,/g, ''));
+                    data.push(isNaN(v) ? null : v);
+                }
             });
+
             if(charts[f]) { 
                 charts[f].data.labels = labels; 
                 charts[f].data.datasets[0].data = data; 
@@ -2327,12 +2350,22 @@
         const lastTrDate = trSorted[trSorted.length - 1];
 
         const processChart = (field, chartId) => {
-            const dates = Array.from(document.querySelectorAll(`.date-${field}`)).map(el => el.value);
-            const values = Array.from(document.querySelectorAll(`.track-${field}`)).map(el => {
-                const v = parseFloat(el.value.replace('%','').replace(/,/g, ''));
-                return isNaN(v) ? null : v;
+            const dateInputs = document.querySelectorAll(`.date-${field}`);
+            const valInputs = document.querySelectorAll(`.track-${field}`);
+            
+            const labData = [];
+            dateInputs.forEach((dateInput, index) => {
+                const valInput = valInputs[index];
+                const hasDate = !!dateInput.value;
+                const hasVal = valInput && valInput.value.trim() !== '';
+                
+                if (hasDate || hasVal) {
+                    if (hasDate) {
+                        const v = parseFloat(valInput.value.replace('%','').replace(/,/g, ''));
+                        labData.push({ date: dateInput.value, val: isNaN(v) ? null : v });
+                    }
+                }
             });
-            const labData = dates.map((d, i) => ({ date: d, val: values[i] })).filter(x => x.date && x.val !== null);
             
             let chartDatesSet = new Set([...labData.map(x => x.date), ...treatmentDates]);
             chartDatesSet.delete("");
