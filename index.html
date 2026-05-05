@@ -535,10 +535,10 @@
                                     window.trendItems = [
                                         { n: "Hemoglobin(g/dL)", c: "hb", l: "sd", p: "12-18", id: "in_hb" },
                                         { n: "Platelet(10^3/μL)", c: "plt", l: "plt", id: "in_plt", p: "150-400" },
-                                        { n: "Reticulocyte(%)", c: "retic", l: "retic", id: "in_retic", p: "0.45-2.28%" },
+                                        { n: "Reticulocyte(%)", c: "retic", l: "retic", id: "in_retic", p: "0.45-2.28" },
                                         { n: "sCr", c: "scr", l: "scr", id: "in_scr", p: "> 2" },
                                         { n: "LDH", c: "ldh", l: "ldh", p: "125-220", id: "in_ldh" },
-                                        { n: "Haptoglobin(mg/dL)", c: "hap", l: "hap", id: "in_hap", p: "30-200" },
+                                        { n: "Haptoglobin(g/l)", c: "hap", l: "hap", id: "in_hap", p: "0.3-2.0" },
                                         { n: "血壓", c: "bp", l: "sd", p: "輸入數值" }
                                     ];
                                     window.trendItems.forEach(t => {
@@ -547,13 +547,13 @@
                                             if(t.c === 'bp') {
                                                 inputHtml = `
                                                     <div class="flex gap-1 items-center w-full">
-                                                        <input type="number" class="track-bp-sys flex-1 min-w-0 px-1 text-center" inputmode="decimal" oninput="logicCheck(this, 'sd'); checkReveal('${t.c}', ${i})" placeholder="收縮壓">
+                                                        <input type="number" class="track-bp-sys flex-1 min-w-0 px-1 text-center" inputmode="decimal" oninput="logicCheck(this, 'sd'); checkReveal('${t.c}', ${i}, this)" placeholder="收縮壓">
                                                         <span class="text-slate-300">/</span>
-                                                        <input type="number" class="track-bp-dia flex-1 min-w-0 px-1 text-center" inputmode="decimal" oninput="logicCheck(this, 'sd'); checkReveal('${t.c}', ${i})" placeholder="舒張壓">
+                                                        <input type="number" class="track-bp-dia flex-1 min-w-0 px-1 text-center" inputmode="decimal" oninput="logicCheck(this, 'sd'); checkReveal('${t.c}', ${i}, this)" placeholder="舒張壓">
                                                     </div>
                                                 `;
                                             } else {
-                                                inputHtml = `<input type="text" class="track-${t.c}" inputmode="decimal" ${i===0 && t.id ? `id="${t.id}"` : ''} oninput="logicCheck(this, '${t.l}'); checkReveal('${t.c}', ${i})" ${t.n.includes('Retic')?'onblur="formatPercent(this)"':''} placeholder="${t.p}">`;
+                                                inputHtml = `<input type="text" class="track-${t.c}" inputmode="decimal" ${i===0 && t.id ? `id="${t.id}"` : ''} oninput="logicCheck(this, '${t.l}'); checkReveal('${t.c}', ${i}, this)" ${t.n.includes('Retic')?'onblur="formatPercent(this)"':''} placeholder="${t.p}">`;
                                             }
 
                                             document.write(`<tr id="tr-${t.c}-${i}" style="${i > 0 ? 'display: none;' : ''}">
@@ -696,7 +696,7 @@
                             </tbody>
                             <tbody id="sec-adamts">
                                 <tr class="label-row"><td>評估項目</td><td>評估日期</td><td>紀錄</td><td>條件核對結果</td></tr>
-                                <tr><td class="item-header font-bold">ADAMTS13 (PE/PT前)</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><input type="text" inputmode="decimal" oninput="logicCheck(this, 'adamts')" id="in_adamts" onblur="formatPercent(this)" placeholder="> 10%"></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
+                                <tr id="tr_adamts"><td class="item-header font-bold">ADAMTS13 (PE/PT前)</td><td data-label="評估日期"><input type="date" class="auto-date"></td><td data-label="評估紀錄"><input type="text" inputmode="decimal" oninput="logicCheck(this, 'adamts')" id="in_adamts" onblur="formatPercent(this)" placeholder="> 10%"></td><td data-label="核對結果" class="result-cell text-[12px] md:text-[13px]"></td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -995,7 +995,7 @@
         </section>
 
         <div class="text-center text-xs font-medium text-slate-400 mt-6 mb-6">
-            本系統相關審查條件與檢核邏輯最後更新日為 2026年04月29日
+            本系統相關審查條件與檢核邏輯最後更新日為 <span id="sys-update-date">2026年05月05日</span>
         </div>
     </form>
 </div>
@@ -1206,7 +1206,7 @@
             const parser = new DOMParser();
             const importedDoc = parser.parseFromString(htmlText, 'text/html');
 
-            const normalizeText = (t) => t ? t.replace(/[\s\u00A0\u200B-\u200D\uFEFF\r\n\t↳\(\)（）]/g, '').toLowerCase() : '';
+            const normalizeText = (t) => t ? t.replace(/[\s\u00A0\u200B-\u200D\uFEFF\r\n\t↳\(\)（）\/\-\>\<\%\,\.]/g, '').toLowerCase() : '';
 
             const normalizeDate = (dVal) => {
                 if (!dVal) return '';
@@ -1258,6 +1258,46 @@
                     const input = document.getElementById('in_pe_count');
                     if (val && !isNaN(val)) { 
                         input.value = val; 
+                        input.dispatchEvent(new Event('input', {bubbles:true})); 
+                    }
+                }
+            }
+
+            let adamtsTr = importedDoc.getElementById('tr_adamts');
+            if (!adamtsTr) {
+                const adamtsHeader = headers.find(td => {
+                    // 強制必須是 item-header，避免抓到上方 "ADAMTS13 檢測" 主標題而誤抓到數字 13
+                    return td.classList.contains('item-header') && normalizeText(td.textContent).includes('adamts13');
+                });
+                if (adamtsHeader) adamtsTr = adamtsHeader.parentElement;
+            }
+
+            if (adamtsTr) {
+                const dateCell = adamtsTr.cells[1];
+                const recordCell = adamtsTr.cells[2];
+                
+                if (dateCell) {
+                    const dVal = normalizeDate(dateCell.textContent.trim());
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(dVal)) {
+                        const dateInput = document.querySelector('#tr_adamts input[type="date"]');
+                        if (dateInput) {
+                            dateInput.value = dVal;
+                            dateInput.dispatchEvent(new Event('change', {bubbles:true}));
+                        }
+                    }
+                }
+                
+                if (recordCell) {
+                    const rawVal = recordCell.textContent.trim();
+                    const input = document.getElementById('in_adamts');
+                    if (rawVal && input) {
+                        // 針對真正的紀錄欄位提取數值
+                        const numMatch = rawVal.match(/[\d\.]+/);
+                        if (numMatch) {
+                            input.value = numMatch[0] + '%';
+                        } else {
+                            input.value = rawVal;
+                        }
                         input.dispatchEvent(new Event('input', {bubbles:true})); 
                     }
                 }
@@ -1364,7 +1404,9 @@
 
                 if (liveTr.id) {
                     impTr = importedDoc.getElementById(liveTr.id);
-                } else {
+                }
+                
+                if (!impTr) {
                     const liveHeader = liveTr.querySelector('td.item-header') || liveTr.querySelector('td:first-child');
                     if (liveHeader) {
                         const hText = normalizeText(liveHeader.textContent);
@@ -1402,7 +1444,7 @@
 
                     const liveRecords = liveTr.querySelectorAll('td[data-label="評估紀錄"] input:not([type="hidden"]), td[data-label="評估紀錄"] select');
                     Array.from(liveRecords).forEach(liveInput => {
-                        if (liveInput.id === 'in_pt_count' || liveInput.id === 'in_pe_count') return;
+                        if (liveInput.id === 'in_pt_count' || liveInput.id === 'in_pe_count' || liveInput.id === 'in_adamts') return;
 
                         const liveCell = liveInput.closest('td');
                         const cellIdx = Array.from(liveTr.cells).indexOf(liveCell);
@@ -1453,20 +1495,38 @@
             
             if (window.trendItems) {
                 window.trendItems.forEach(t => {
-                    let maxIndex = 0;
+                    let maxIndex = -1;
                     for (let i = 0; i < 5; i++) {
                         const row = document.getElementById(`tr-${t.c}-${i}`);
                         if (row) {
                             const inputs = Array.from(row.querySelectorAll('td[data-label="評估紀錄"] input'));
-                            if (inputs.some(inp => inp.value !== '')) maxIndex = i;
+                            const valueInputs = inputs.filter(inp => inp.type !== 'date');
+                            if (valueInputs.some(inp => inp.value.trim() !== '')) {
+                                maxIndex = i;
+                            }
                         }
                     }
-                    if (maxIndex > 0) {
-                        const rsCell = document.getElementById(`td-rs-${t.c}`);
-                        if (rsCell) rsCell.rowSpan = maxIndex + 1;
-                        for (let i = 0; i <= maxIndex; i++) {
-                            const row = document.getElementById(`tr-${t.c}-${i}`);
-                            if (row) row.style.display = '';
+                    
+                    let showUntil = maxIndex < 4 ? maxIndex + 1 : 4;
+                    
+                    const rsCell = document.getElementById(`td-rs-${t.c}`);
+                    if (rsCell) rsCell.rowSpan = showUntil + 1;
+                    
+                    for (let i = 0; i < 5; i++) {
+                        const row = document.getElementById(`tr-${t.c}-${i}`);
+                        if (row) {
+                            if (i <= showUntil) {
+                                row.style.display = '';
+                                if (i === showUntil && maxIndex !== 4) {
+                                    const dateInput = row.querySelector('input[type="date"]');
+                                    if (dateInput && !dateInput.value) {
+                                        dateInput.value = new Date().toISOString().split('T')[0];
+                                    }
+                                }
+                            } else {
+                                row.style.display = 'none';
+                                row.querySelectorAll('input').forEach(inp => inp.value = '');
+                            }
                         }
                     }
                 });
@@ -1801,6 +1861,13 @@
             
             originalTable.querySelectorAll('tr').forEach(tr => {
                 if (tr.style.display === 'none') tr.style.display = '';
+                
+                if (tr.id && tr.id.match(/^tr-[a-z]+-\d+$/)) {
+                    const liveTr = document.getElementById(tr.id);
+                    if (liveTr && liveTr.style.display === 'none') {
+                        tr.remove();
+                    }
+                }
             });
 
             originalTable.querySelectorAll('.toggle-badge, .prog-badge, .no-print, canvas, svg, button, script').forEach(el => el.remove());
@@ -1918,24 +1985,49 @@
         updateCharts(); 
     }
 
-    function checkReveal(category, index) {
+    function checkReveal(category, index, el) {
+        let hasValue = false;
+        if (el) {
+            if (el.classList.contains('track-bp-sys') || el.classList.contains('track-bp-dia')) {
+                const row = el.closest('tr');
+                const sys = row.querySelector('.track-bp-sys');
+                const dia = row.querySelector('.track-bp-dia');
+                if ((sys && sys.value.trim() !== '') || (dia && dia.value.trim() !== '')) {
+                    hasValue = true;
+                }
+            } else {
+                hasValue = el.value.trim() !== '';
+            }
+        } else {
+            hasValue = true; 
+        }
+        
+        if (!hasValue) return;
+
         if (index < 4) {
             const nextIndex = index + 1;
             const nextRow = document.getElementById(`tr-${category}-${nextIndex}`);
             if (nextRow && nextRow.style.display === 'none') {
                 nextRow.style.display = ''; 
-                const rsCell = document.getElementById(`td-rs-${category}`);
-                if (rsCell) {
-                    rsCell.rowSpan = nextIndex + 1; 
-                }
                 const today = new Date().toISOString().split('T')[0];
                 const dateInput = nextRow.querySelector(`input[type="date"]`);
                 if (dateInput && !dateInput.value) {
                     dateInput.value = today;
                 }
             }
-            updateProgressUI(); 
         }
+        
+        let visibleCount = 0;
+        for(let j=0; j<5; j++) {
+            const r = document.getElementById(`tr-${category}-${j}`);
+            if(r && r.style.display !== 'none') visibleCount++;
+        }
+        const rsCell = document.getElementById(`td-rs-${category}`);
+        if (rsCell) {
+            rsCell.rowSpan = visibleCount;
+        }
+        
+        if (typeof updateProgressUI === 'function') updateProgressUI(); 
     }
 
     const plateletAlertPlugin = {
@@ -2061,15 +2153,24 @@
                 text = (num > 1.0) ? "異常" : (num >= 0.2 && num <= 1.0 ? "正常" : "異常");
                 style = (num > 1.0 || num < 0.2) ? "text-alert" : "text-success"; break;
             case 'hap':
-                text = (num < 30) ? "符合健保申請條件" : (num >= 30 && num <= 200 ? "正常區間" : "異常");
-                style = (num < 30) ? "text-success" : (num >= 30 && num <= 200 ? "text-neutral" : "text-alert"); 
+                text = (num < 0.3) ? "符合健保申請條件" : (num >= 0.3 && num <= 2.0 ? "正常區間" : "異常");
+                style = (num < 0.3) ? "text-success" : (num >= 0.3 && num <= 2.0 ? "text-neutral" : "text-alert"); 
                 updatePlasmicAuto(); break;
             case 'schisto':
                 text = (val === "Postive") ? "符合條件" : "建議持續監測";
                 style = (val === "Postive") ? "text-success" : "text-warning"; break;
             case 'gene':
-                text = (val === "Postive") ? "有利證據" : "依臨床資訊送審";
-                style = (val === "Postive") ? "text-success" : "text-warning"; break;
+                if (val === "未檢測") {
+                    text = "罕病認證須檢測";
+                    style = "text-alert";
+                } else if (val === "Postive") {
+                    text = "有利證據";
+                    style = "text-success";
+                } else {
+                    text = "依臨床資訊送審";
+                    style = "text-warning";
+                }
+                break;
             case 'biopsy':
                 text = (val === "Thrombosis") ? "有利證據" : "視情況施作";
                 style = (val === "Thrombosis") ? "text-success" : "text-warning"; break;
@@ -2077,7 +2178,8 @@
                 text = (val === "異常") ? "有利證據" : "視情況施作";
                 style = (val === "異常") ? "text-success" : "text-warning"; break;
             case 'adamts':
-                const a_v = parseFloat(val.replace('%',''));
+                const a_match = val.match(/[\d\.]+/);
+                const a_v = a_match ? parseFloat(a_match[0]) : NaN;
                 text = (a_v >= 10) ? "符合條件" : "無法排除疑似TTP";
                 style = (a_v >= 10) ? "text-success" : "text-alert"; break;
             case 'pt':
@@ -2144,7 +2246,7 @@
         const scr = getWorstValueForPlasmic('track-scr', 'max');
 
         if(!isNaN(plt)) { document.getElementsByName('p0')[plt < 30 ? 0 : 1].checked = true; }
-        if(!isNaN(hap) || !isNaN(retic)) { document.getElementsByName('p1')[(retic > 2.5 || (hap > 0 && hap < 30)) ? 0 : 1].checked = true; }
+        if(!isNaN(hap) || !isNaN(retic)) { document.getElementsByName('p1')[(retic > 2.5 || (hap > 0 && hap < 0.3)) ? 0 : 1].checked = true; }
         if(!isNaN(scr)) { document.getElementsByName('p6')[scr < 2.0 ? 0 : 1].checked = true; }
         calcPlasmic();
     }
@@ -2302,7 +2404,9 @@
         const pt = parseFloat(document.getElementById('in_pt_count')?.value) || 0;
         const pe = parseFloat(document.getElementById('in_pe_count')?.value) || 0;
         const hd = !!document.getElementById('in_hd_count')?.value;
-        const adamts = parseFloat(document.getElementById('in_adamts')?.value?.replace('%',''));
+        const adamtsValStr = document.getElementById('in_adamts')?.value || '';
+        const adamtsMatch = adamtsValStr.match(/[\d\.]+/);
+        const adamts = adamtsMatch ? parseFloat(adamtsMatch[0]) : NaN;
         
         const renalSys = document.getElementById('in_renal_sys')?.value;
         const giSys = document.getElementById('in_gi_sys')?.value;
@@ -2362,7 +2466,7 @@
             { label: "溶血性貧血 (Hb < 10.0 g/dL)", val: (hb < 10.0), weight: 1 },
             { label: "血小板減少 (Plt < 150,000/μL)", val: (plt < 150), weight: 1 },
             { label: "血清 LDH 升高 (高於醫院正常值)", val: (ldh > 220), weight: 1 },
-            { label: "Haptoglobin 降低 (低於標準值或不可測)", val: (hap < 30), weight: 1 }
+            { label: "Haptoglobin 降低 (低於標準值或不可測)", val: (hap < 0.3), weight: 1 }
         ], false);
 
         renderCheck('list-tma-判定', [
@@ -2465,6 +2569,19 @@
     window.onload = function() {
         const today = new Date().toISOString().split('T')[0];
         document.querySelectorAll('.auto-date').forEach(i => i.value = today);
+
+        // 自動讀取檔案的最後修改(儲存)時間，做為版本更新識別
+        try {
+            const lastMod = new Date(document.lastModified);
+            if (!isNaN(lastMod) && document.lastModified) {
+                const y = lastMod.getFullYear();
+                const m = String(lastMod.getMonth() + 1).padStart(2, '0');
+                const d = String(lastMod.getDate()).padStart(2, '0');
+                const dateSpan = document.getElementById('sys-update-date');
+                if (dateSpan) dateSpan.innerText = `${y}年${m}月${d}日`;
+            }
+        } catch(e) {}
+
         initCharts(); 
         calculateNHICompliance();
         updatePTPECharts(); 
